@@ -11,6 +11,19 @@ The dictation app market (Wispr Flow, Superwhisper, Aqua Voice, and others) is c
 
 quietype's bet: local-model transcription is now good enough (Parakeet/Whisper-class models) that there's no remaining excuse for cloud-only dictation, and the gap in the market is **execution quality on the local-first idea**, not the idea itself.
 
+## How it compares
+
+| | quietype | Wispr Flow | Superwhisper |
+|---|---|---|---|
+| Processing | Local by default | Cloud only | Local |
+| Platforms | Windows, macOS, Linux | Mac, Win, iOS, Android | Mac, iOS |
+| Open source | Yes | No | No |
+| Streaming transcription | Planned | No | No |
+| Pricing | Free | $12–15/mo | $8.49/mo or $249 lifetime |
+| Works offline | Yes | No | Yes |
+
+Superwhisper already covers local + Mac well; quietype's edit is Windows/Linux-first, streaming, and fully open. Wispr Flow's edit is polish, at the cost of privacy, price, and offline reliability.
+
 ## Principles
 
 1. **Local by default.** Transcription runs on-device. No audio or transcript leaves your machine unless you explicitly opt into a cloud/BYOK backend.
@@ -46,6 +59,10 @@ npm run tauri dev
 - [ ] Custom vocabulary
 - [ ] Windows + Linux packaging (not just macOS)
 - [ ] Optional BYOK cloud cleanup pass
+
+## Contributing
+
+Too early for a formal process — the core dictation loop (hotkey → local transcription → text injection) doesn't exist yet. Open an issue if you want to discuss direction or help build it.
 
 ## License
 
