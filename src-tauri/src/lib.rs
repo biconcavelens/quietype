@@ -5,7 +5,7 @@ mod transcribe;
 
 use std::sync::Mutex;
 use tauri::Manager;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Mode {
@@ -17,10 +17,21 @@ struct AppState {
     active: Mutex<Option<(Mode, audio::RecordingHandle)>>,
 }
 
-// ponytail: two fixed global hotkeys (F9/F10), no settings UI yet. Add a
-// config surface when a second person besides us needs different keys.
-const DICTATE_HOTKEY: Code = Code::F9;
-const ASSISTANT_HOTKEY: Code = Code::F10;
+// ponytail: two fixed global hotkeys, no settings UI yet. Add a config
+// surface when a second person besides us needs different keys.
+//
+// Both use Ctrl as the trigger key (Windows' RegisterHotKey allows a
+// modifier key as the actual trigger vk) so Windows+Ctrl and
+// Windows+Shift+Ctrl read as natural chords rather than needing a letter key.
+const HOTKEY_TRIGGER: Code = Code::ControlLeft;
+
+fn dictate_modifiers() -> Modifiers {
+    Modifiers::SUPER
+}
+
+fn assistant_modifiers() -> Modifiers {
+    Modifiers::SUPER | Modifiers::SHIFT
+}
 
 fn toggle(app: &tauri::AppHandle, mode: Mode) {
     let state = app.state::<AppState>();
@@ -96,10 +107,10 @@ pub fn run() {
                     if event.state != ShortcutState::Pressed {
                         return;
                     }
-                    if shortcut.matches(tauri_plugin_global_shortcut::Modifiers::empty(), DICTATE_HOTKEY) {
-                        toggle(app, Mode::Dictate);
-                    } else if shortcut.matches(tauri_plugin_global_shortcut::Modifiers::empty(), ASSISTANT_HOTKEY) {
+                    if shortcut.matches(assistant_modifiers(), HOTKEY_TRIGGER) {
                         toggle(app, Mode::Assistant);
+                    } else if shortcut.matches(dictate_modifiers(), HOTKEY_TRIGGER) {
+                        toggle(app, Mode::Dictate);
                     }
                 })
                 .build(),
@@ -108,11 +119,11 @@ pub fn run() {
             let handle = app.handle();
             handle
                 .global_shortcut()
-                .register(Shortcut::new(None, DICTATE_HOTKEY))?;
+                .register(Shortcut::new(Some(dictate_modifiers()), HOTKEY_TRIGGER))?;
             handle
                 .global_shortcut()
-                .register(Shortcut::new(None, ASSISTANT_HOTKEY))?;
-            eprintln!("[quietype] F9 = dictate, F10 = assistant");
+                .register(Shortcut::new(Some(assistant_modifiers()), HOTKEY_TRIGGER))?;
+            eprintln!("[quietype] Win+Ctrl = dictate, Win+Shift+Ctrl = assistant");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![])
