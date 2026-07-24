@@ -1,6 +1,11 @@
 # quietype
 
-**Local-first, open-source voice dictation.** Speak into any app on Windows, macOS, or Linux — nothing leaves your machine unless you say so.
+**Local-first, open-source desktop dictation + assistant.** Two hotkeys, one voice pipeline:
+
+- **F9 — Dictate.** Press, speak, press again. Transcribed locally, typed verbatim wherever your cursor is.
+- **F10 — Assistant.** Press, speak an instruction ("make this more professional", "answer this using my resume"), press again. Your selected text becomes context, Claude does the edit/fill, the result gets typed in.
+
+Both hotkeys share the same local speech-to-text engine — the only difference is what happens to the transcript: typed as-is, or handed to an LLM as an instruction.
 
 ## Why
 
@@ -34,31 +39,34 @@ Superwhisper already covers local + Mac well; quietype's edit is Windows/Linux-f
 
 ## Status
 
-Early scaffold. Not yet functional as a dictation app.
+First working harness: global hotkeys, local transcription, clipboard-based text injection, and an LLM-backed assistant mode. No streaming, no settings UI, no packaging yet.
 
 ## Stack
 
 - **Core:** Rust + [Tauri v2](https://tauri.app/)
-- **UI:** Vanilla TypeScript (minimal, will evolve)
-- **Transcription (planned):** local Whisper/Parakeet inference via Rust bindings, with an optional BYOK cloud backend for AI cleanup
+- **Audio capture:** [cpal](https://docs.rs/cpal)
+- **Local transcription:** [whisper-rs](https://docs.rs/whisper-rs) (whisper.cpp bindings) — bring your own ggml model, see Setup
+- **Text injection / selection capture:** clipboard + simulated copy/paste ([arboard](https://docs.rs/arboard) + [enigo](https://docs.rs/enigo)) — the same mechanism every dictation app uses under the hood
+- **Assistant backend:** Anthropic API (BYOK — set `ANTHROPIC_API_KEY`), cloud by design since this is the one part of the pipeline that benefits from a frontier model
 
-## Development
+## Setup
 
-```bash
-npm install
-npm run tauri dev
-```
+1. Download a whisper.cpp ggml model, e.g. the base English model (~142MB) from the [official whisper.cpp model repo](https://huggingface.co/ggerganov/whisper.cpp), and place it at `src-tauri/models/ggml-base.en.bin` (or point `QUIETYPE_WHISPER_MODEL` at wherever you put it). Not bundled or auto-downloaded — you choose what runs on your machine.
+2. Set `ANTHROPIC_API_KEY` in your environment (only needed for the F10 assistant hotkey; F9 dictation works fully offline without it).
+3. `npm install && npm run tauri dev`
 
 ## Roadmap
 
-- [ ] System-wide global hotkey capture (push-to-talk)
-- [ ] Local model inference (whisper.cpp / Parakeet via ONNX)
+- [x] Global hotkey capture (F9 dictate / F10 assistant)
+- [x] Local model inference (whisper.cpp via whisper-rs)
+- [x] Text injection into focused app/field
+- [x] Assistant mode: selected text as context, LLM edit/fill, BYOK
 - [ ] Streaming partial transcripts
-- [ ] Text injection into focused app/field
-- [ ] Verbatim vs. AI-cleanup toggle
+- [ ] Verbatim vs. AI-cleanup toggle for dictation
 - [ ] Custom vocabulary
-- [ ] Windows + Linux packaging (not just macOS)
-- [ ] Optional BYOK cloud cleanup pass
+- [ ] Configurable hotkeys (currently hardcoded F9/F10)
+- [ ] Screen-context capture beyond "selected text" (for blank-field form filling)
+- [ ] Windows + Linux packaging (dev-only right now)
 
 ## Contributing
 
