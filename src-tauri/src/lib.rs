@@ -20,17 +20,19 @@ struct AppState {
 // ponytail: two fixed global hotkeys, no settings UI yet. Add a config
 // surface when a second person besides us needs different keys.
 //
-// Both use Ctrl as the trigger key (Windows' RegisterHotKey allows a
-// modifier key as the actual trigger vk) so Windows+Ctrl and
-// Windows+Shift+Ctrl read as natural chords rather than needing a letter key.
-const HOTKEY_TRIGGER: Code = Code::ControlLeft;
+// A pure modifier chord (Win+Ctrl, no other key) isn't registerable: the
+// `global-hotkey` crate's Windows backend has no VK mapping for standalone
+// modifier codes as triggers ("Unknown VKCode for ControlLeft"). Space is
+// the trigger instead -- the same pattern Discord, Claude Code's voice mode,
+// etc. use for push-to-talk. So this is Win+Ctrl+Space / Win+Ctrl+Shift+Space.
+const HOTKEY_TRIGGER: Code = Code::Space;
 
 fn dictate_modifiers() -> Modifiers {
-    Modifiers::SUPER
+    Modifiers::SUPER | Modifiers::CONTROL
 }
 
 fn assistant_modifiers() -> Modifiers {
-    Modifiers::SUPER | Modifiers::SHIFT
+    Modifiers::SUPER | Modifiers::CONTROL | Modifiers::SHIFT
 }
 
 fn toggle(app: &tauri::AppHandle, mode: Mode) {
@@ -123,7 +125,7 @@ pub fn run() {
             handle
                 .global_shortcut()
                 .register(Shortcut::new(Some(assistant_modifiers()), HOTKEY_TRIGGER))?;
-            eprintln!("[quietype] Win+Ctrl = dictate, Win+Shift+Ctrl = assistant");
+            eprintln!("[quietype] Win+Ctrl+Space = dictate, Win+Ctrl+Shift+Space = assistant");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![])
