@@ -22,10 +22,11 @@ struct AppState {
 //
 // A pure modifier chord (Win+Ctrl, no other key) isn't registerable: the
 // `global-hotkey` crate's Windows backend has no VK mapping for standalone
-// modifier codes as triggers ("Unknown VKCode for ControlLeft"). Space is
-// the trigger instead -- the same pattern Discord, Claude Code's voice mode,
-// etc. use for push-to-talk. So this is Win+Ctrl+Space / Win+Ctrl+Shift+Space.
-const HOTKEY_TRIGGER: Code = Code::Space;
+// modifier codes as triggers ("Unknown VKCode for ControlLeft"). Space was
+// the first choice but collided with ctfmon (Windows' IME/language-switch
+// hotkeys commonly bind Ctrl+Space). Backquote is about as uncontested as a
+// trigger key gets. So this is Win+Ctrl+` / Win+Ctrl+Shift+`.
+const HOTKEY_TRIGGER: Code = Code::Backquote;
 
 fn dictate_modifiers() -> Modifiers {
     Modifiers::SUPER | Modifiers::CONTROL
@@ -125,7 +126,7 @@ pub fn run() {
             handle
                 .global_shortcut()
                 .register(Shortcut::new(Some(assistant_modifiers()), HOTKEY_TRIGGER))?;
-            eprintln!("[quietype] Win+Ctrl+Space = dictate, Win+Ctrl+Shift+Space = assistant");
+            eprintln!("[quietype] Win+Ctrl+` = dictate, Win+Ctrl+Shift+` = assistant");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![])
