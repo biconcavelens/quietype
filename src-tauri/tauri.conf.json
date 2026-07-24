@@ -15,7 +15,8 @@
       {
         "title": "quietype",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "additionalBrowserArgs": "--proxy-server=\"direct://\" --proxy-bypass-list=*"
       }
     ],
     "security": {
