@@ -2,42 +2,88 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <title>quietype</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
 
   <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
-
-      <div class="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/src/assets/vite.svg" class="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img
-            src="/src/assets/tauri.svg"
-            class="logo tauri"
-            alt="Tauri logo"
-          />
-        </a>
-        <a href="https://www.typescriptlang.org/docs" target="_blank">
-          <img
-            src="/src/assets/typescript.svg"
-            class="logo typescript"
-            alt="typescript logo"
-          />
-        </a>
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark"></span>
+        <span class="name">quietype</span>
       </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
+      <div class="hotkeys">
+        <span class="hk"><kbd>Win</kbd><kbd>Ctrl</kbd><kbd>`</kbd> dictate</span>
+        <span class="hk"
+          ><kbd>Win</kbd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>`</kbd> assistant</span
+        >
+      </div>
+    </header>
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
+    <nav class="tabs">
+      <button class="tab is-active" data-tab="history">History</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </nav>
+
+    <main>
+      <section class="panel is-active" id="panel-history">
+        <div class="panel-head">
+          <h2>Recent</h2>
+          <button class="btn btn-ghost" id="clear-history">Clear</button>
+        </div>
+        <div id="history-list" class="list"></div>
+      </section>
+
+      <section class="panel" id="panel-settings">
+        <div class="panel-head">
+          <h2>Settings</h2>
+          <span class="saved" id="saved-flag">Saved</span>
+        </div>
+
+        <div class="field">
+          <label for="model-path">Whisper model</label>
+          <input id="model-path" type="text" spellcheck="false" />
+          <p class="hint" id="model-hint"></p>
+        </div>
+
+        <div class="field">
+          <label for="api-key">Anthropic API key</label>
+          <input
+            id="api-key"
+            type="password"
+            spellcheck="false"
+            placeholder="sk-ant-…"
+            autocomplete="off"
+          />
+          <p class="hint">
+            Only used for assistant mode. Dictation stays fully offline. If
+            <code>ANTHROPIC_API_KEY</code> is set in your environment, it wins over
+            this field.
+          </p>
+        </div>
+
+        <div class="field field-row">
+          <div>
+            <label for="sound">Sound on completion</label>
+            <p class="hint">Play a short chime when text is inserted.</p>
+          </div>
+          <input id="sound" type="checkbox" />
+        </div>
+
+        <div class="privacy">
+          <strong>Where your data goes</strong>
+          <ul>
+            <li>Dictation audio is transcribed on this machine and never uploaded.</li>
+            <li>
+              Assistant mode sends your spoken instruction and current selection to
+              Anthropic. Nothing else.
+            </li>
+            <li>History and settings are plain files in your local app-config folder.</li>
+          </ul>
+        </div>
+      </section>
     </main>
   </body>
 </html>

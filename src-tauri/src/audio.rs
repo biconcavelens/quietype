@@ -13,7 +13,12 @@ pub struct RecordingHandle {
     result_rx: mpsc::Receiver<Vec<f32>>,
 }
 
-pub fn start_recording() -> Result<RecordingHandle, String> {
+/// Starts capturing from the default input device.
+///
+/// `level_tx` receives a 0..1 loudness value per audio callback so the UI can
+/// draw a live waveform. It is dropped when capture ends, which closes the
+/// channel and lets the consumer's loop exit on its own.
+pub fn start_recording(level_tx: mpsc::Sender<f32>) -> Result<RecordingHandle, String> {
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let (result_tx, result_rx) = mpsc::channel::<Vec<f32>>();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
@@ -23,7 +28,7 @@ pub fn start_recording() -> Result<RecordingHandle, String> {
         let device = match host.default_input_device() {
             Some(d) => d,
             None => {
-                let _ = ready_tx.send(Err("no input device found".to_string()));
+                let _ = ready_tx.send(Err("No microphone found.".to_string()));
                 return;
             }
         };
@@ -42,12 +47,13 @@ pub fn start_recording() -> Result<RecordingHandle, String> {
 
         let buffer = Arc::new(Mutex::new(Vec::<f32>::new()));
         let buffer_cb = buffer.clone();
-        let err_fn = |err| eprintln!("audio stream error: {err}");
+        let err_fn = |err| eprintln!("[quietype] audio stream error: {err}");
 
         let stream_result = match sample_format {
             cpal::SampleFormat::F32 => device.build_input_stream(
                 &config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    let _ = level_tx.send(level_of(data));
                     buffer_cb.lock().unwrap().extend_from_slice(data);
                 },
                 err_fn,
@@ -57,7 +63,9 @@ pub fn start_recording() -> Result<RecordingHandle, String> {
                 &config,
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
                     let mut buf = buffer_cb.lock().unwrap();
+                    let start = buf.len();
                     buf.extend(data.iter().map(|s| *s as f32 / i16::MAX as f32));
+                    let _ = level_tx.send(level_of(&buf[start..]));
                 },
                 err_fn,
                 None,
@@ -66,13 +74,15 @@ pub fn start_recording() -> Result<RecordingHandle, String> {
                 &config,
                 move |data: &[u16], _: &cpal::InputCallbackInfo| {
                     let mut buf = buffer_cb.lock().unwrap();
+                    let start = buf.len();
                     buf.extend(data.iter().map(|s| (*s as f32 - 32768.0) / 32768.0));
+                    let _ = level_tx.send(level_of(&buf[start..]));
                 },
                 err_fn,
                 None,
             ),
             other => {
-                let _ = ready_tx.send(Err(format!("unsupported input sample format: {other:?}")));
+                let _ = ready_tx.send(Err(format!("Unsupported audio format: {other:?}")));
                 return;
             }
         };
@@ -117,6 +127,16 @@ impl RecordingHandle {
     }
 }
 
+/// RMS loudness, scaled into a 0..1 range that looks reasonable on a meter.
+fn level_of(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let sum_sq: f32 = samples.iter().map(|s| s * s).sum();
+    let rms = (sum_sq / samples.len() as f32).sqrt();
+    (rms * 4.0).clamp(0.0, 1.0)
+}
+
 fn downmix(samples: &[f32], channels: u16) -> Vec<f32> {
     if channels <= 1 {
         return samples.to_vec();
@@ -147,4 +167,30 @@ fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
             a + (b - a) * frac
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn silence_is_zero_and_loud_is_capped() {
+        assert_eq!(level_of(&[]), 0.0);
+        assert_eq!(level_of(&[0.0; 64]), 0.0);
+        assert_eq!(level_of(&[1.0; 64]), 1.0);
+        assert!(level_of(&[0.05; 64]) > 0.0);
+    }
+
+    #[test]
+    fn downmix_averages_channel_pairs() {
+        assert_eq!(downmix(&[1.0, 0.0, 0.5, 0.5], 2), vec![0.5, 0.5]);
+        assert_eq!(downmix(&[1.0, 2.0], 1), vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn resample_halves_length_when_rate_halves() {
+        let input: Vec<f32> = (0..100).map(|i| i as f32).collect();
+        assert_eq!(resample_linear(&input, 32_000, 16_000).len(), 50);
+        assert_eq!(resample_linear(&input, 16_000, 16_000).len(), 100);
+    }
 }

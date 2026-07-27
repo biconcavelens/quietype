@@ -2,8 +2,8 @@
 
 **Local-first, open-source desktop dictation + assistant.** Two hotkeys, one voice pipeline:
 
-- **F9 — Dictate.** Press, speak, press again. Transcribed locally, typed verbatim wherever your cursor is.
-- **F10 — Assistant.** Press, speak an instruction ("make this more professional", "answer this using my resume"), press again. Your selected text becomes context, Claude does the edit/fill, the result gets typed in.
+- **`Win`+`Ctrl`+`` ` `` — Dictate.** Press, speak, press again. Transcribed locally, typed verbatim wherever your cursor is.
+- **`Win`+`Ctrl`+`Shift`+`` ` `` — Assistant.** Press, speak an instruction ("make this more professional", "answer this using my resume"), press again. Your selected text becomes context, Claude does the edit/fill, the result gets typed in.
 
 Both hotkeys share the same local speech-to-text engine — the only difference is what happens to the transcript: typed as-is, or handed to an LLM as an instruction.
 
@@ -39,7 +39,24 @@ Superwhisper already covers local + Mac well; quietype's edit is Windows/Linux-f
 
 ## Status
 
-First working harness: global hotkeys, local transcription, clipboard-based text injection, and an LLM-backed assistant mode. No streaming, no settings UI, no packaging yet.
+Working. Lives in the system tray with no window in the way: a floating pill
+appears when you hold a hotkey, shows a live waveform while you talk, and
+disappears once the text lands. A separate window holds history and settings.
+
+Not done yet: streaming partial transcripts, rebindable hotkeys, packaging.
+
+## How it's built
+
+- **No window on the hot path.** The app is a tray process. The only thing that
+  appears during dictation is a 340×64 overlay pill, which is created once at
+  startup and shown/hidden — so there's no window cold-start between pressing
+  the hotkey and seeing feedback.
+- **The overlay can't take focus** (`focusable(false)`). Text injection works by
+  pasting into whatever window is focused, so an overlay that stole focus would
+  paste into itself.
+- **The model is loaded at startup**, not on first use, so the first dictation
+  doesn't pay a one-off model-load cost on top of its own latency.
+- **Transcription runs on a blocking thread pool**, off the async runtime.
 
 ## Stack
 
@@ -47,24 +64,29 @@ First working harness: global hotkeys, local transcription, clipboard-based text
 - **Audio capture:** [cpal](https://docs.rs/cpal)
 - **Local transcription:** [whisper-rs](https://docs.rs/whisper-rs) (whisper.cpp bindings) — bring your own ggml model, see Setup
 - **Text injection / selection capture:** clipboard + simulated copy/paste ([arboard](https://docs.rs/arboard) + [enigo](https://docs.rs/enigo)) — the same mechanism every dictation app uses under the hood
-- **Assistant backend:** Anthropic API (BYOK — set `ANTHROPIC_API_KEY`), cloud by design since this is the one part of the pipeline that benefits from a frontier model
+- **Assistant backend:** Anthropic API (BYOK), cloud by design since this is the one part of the pipeline that benefits from a frontier model
 
 ## Setup
 
-1. Download a whisper.cpp ggml model, e.g. the base English model (~142MB) from the [official whisper.cpp model repo](https://huggingface.co/ggerganov/whisper.cpp), and place it at `src-tauri/models/ggml-base.en.bin` (or point `QUIETYPE_WHISPER_MODEL` at wherever you put it). Not bundled or auto-downloaded — you choose what runs on your machine.
-2. Set `ANTHROPIC_API_KEY` in your environment (only needed for the F10 assistant hotkey; F9 dictation works fully offline without it).
+1. Download a whisper.cpp ggml model, e.g. the base English model (~142MB) from
+   the [official whisper.cpp model repo](https://huggingface.co/ggerganov/whisper.cpp),
+   and place it at `src-tauri/models/ggml-base.en.bin`. Not bundled or
+   auto-downloaded — you choose what runs on your machine. The path is editable
+   in Settings, or via `QUIETYPE_WHISPER_MODEL`.
+2. For assistant mode only, add an Anthropic API key in Settings (or export
+   `ANTHROPIC_API_KEY`, which takes precedence). Dictation works fully offline
+   without one.
 3. `npm install && npm run tauri dev`
 
 ## Roadmap
 
-- [x] Global hotkey capture (F9 dictate / F10 assistant)
-- [x] Local model inference (whisper.cpp via whisper-rs)
-- [x] Text injection into focused app/field
-- [x] Assistant mode: selected text as context, LLM edit/fill, BYOK
+- [x] Global hotkeys, local inference, text injection, assistant mode
+- [x] Tray app with floating overlay + live waveform
+- [x] History and settings UI
 - [ ] Streaming partial transcripts
 - [ ] Verbatim vs. AI-cleanup toggle for dictation
 - [ ] Custom vocabulary
-- [ ] Configurable hotkeys (currently hardcoded F9/F10)
+- [ ] Rebindable hotkeys (currently fixed)
 - [ ] Screen-context capture beyond "selected text" (for blank-field form filling)
 - [ ] Windows + Linux packaging (dev-only right now)
 
