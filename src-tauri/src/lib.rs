@@ -1,18 +1,18 @@
 mod assistant;
 mod audio;
+mod hotkeys;
 mod inject;
 mod store;
 mod transcribe;
 
 use serde::Serialize;
-use std::sync::{mpsc, Mutex};
+use std::sync::mpsc;
 use std::thread;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 const MAIN_LABEL: &str = "main";
 const OVERLAY_LABEL: &str = "overlay";
@@ -21,26 +21,12 @@ const OVERLAY_H: f64 = 64.0;
 /// Gap between the overlay pill and the bottom of the screen.
 const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 
-// ponytail: two fixed global hotkeys, no rebinding UI yet. A pure modifier
-// chord (Win+Ctrl alone) can't be registered -- global-hotkey has no VK code
-// for a bare modifier as trigger -- and Space collides with Windows' IME
-// switcher, so Backquote is the trigger.
-const HOTKEY_TRIGGER: Code = Code::Backquote;
-
 // WebView2 reads the system's WinINet proxy config even for localhost, so a
 // stale proxy entry makes it hang loading the dev server. Force a direct
 // connection. The msWebOOUI/msPdfOOUI flags are Tauri's own defaults, repeated
 // here because setting this option replaces them.
 const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
      --proxy-server=direct:// --proxy-bypass-list=*";
-
-fn dictate_modifiers() -> Modifiers {
-    Modifiers::SUPER | Modifiers::CONTROL
-}
-
-fn assistant_modifiers() -> Modifiers {
-    Modifiers::SUPER | Modifiers::CONTROL | Modifiers::SHIFT
-}
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -56,10 +42,6 @@ impl Mode {
             Mode::Assistant => "assistant",
         }
     }
-}
-
-struct AppState {
-    active: Mutex<Option<(Mode, audio::RecordingHandle)>>,
 }
 
 #[derive(Serialize, Clone)]
@@ -104,60 +86,60 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// Hotkey handler: first press starts recording, second press for the same
-/// mode stops it and kicks off processing.
-fn toggle(app: &AppHandle, mode: Mode) {
-    let state = app.state::<AppState>();
-    let mut active = state.active.lock().unwrap();
+/// Called by the hotkeys module when the required keys go down. Returns the
+/// recording handle for the caller to hold until keys come back up -- there's
+/// no shared "current recording" state here, the caller (hotkeys' controller
+/// thread) is the sole owner of that for as long as it's active.
+pub(crate) fn begin_recording(app: &AppHandle, mode: Mode) -> Option<audio::RecordingHandle> {
+    let (level_tx, level_rx) = mpsc::channel::<f32>();
+    match audio::start_recording(level_tx) {
+        Ok(handle) => {
+            show_overlay(app);
+            emit_state(app, "recording", mode, None);
 
-    match active.take() {
-        None => {
-            let (level_tx, level_rx) = mpsc::channel::<f32>();
-            match audio::start_recording(level_tx) {
-                Ok(handle) => {
-                    show_overlay(app);
-                    emit_state(app, "recording", mode, None);
-
-                    // Forward mic levels to the overlay until capture ends and
-                    // the sender is dropped.
-                    let app_levels = app.clone();
-                    thread::spawn(move || {
-                        while let Ok(level) = level_rx.recv() {
-                            let _ = app_levels.emit_to(OVERLAY_LABEL, "overlay-level", level);
-                        }
-                    });
-
-                    *active = Some((mode, handle));
+            // Forward mic levels to the overlay until capture ends and the
+            // sender is dropped.
+            let app_levels = app.clone();
+            thread::spawn(move || {
+                while let Ok(level) = level_rx.recv() {
+                    let _ = app_levels.emit_to(OVERLAY_LABEL, "overlay-level", level);
                 }
-                Err(e) => {
-                    show_overlay(app);
-                    emit_state(app, "error", mode, Some(e));
-                    fade_out(app.clone(), 2600);
-                }
-            }
+            });
+
+            Some(handle)
         }
-        Some((active_mode, handle)) if active_mode == mode => {
-            emit_state(app, "transcribing", mode, None);
-            let samples = handle.stop();
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move { process(app, mode, samples).await });
-        }
-        Some(other) => {
-            // The other mode is mid-recording; leave it running.
-            *active = Some(other);
+        Err(e) => {
+            show_overlay(app);
+            emit_state(app, "error", mode, Some(e));
+            fade_out(app.clone(), 2600);
+            None
         }
     }
 }
 
+/// Called by the hotkeys module when a required key comes back up.
+pub(crate) fn end_recording(app: &AppHandle, mode: Mode, handle: audio::RecordingHandle) {
+    emit_state(app, "transcribing", mode, None);
+    let samples = handle.stop();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { process(app, mode, samples).await });
+}
+
 async fn process(app: AppHandle, mode: Mode, samples: Vec<f32>) {
+    let t0 = std::time::Instant::now();
     let settings = store::load_settings(&app);
 
+    let audio_ms = samples.len() as u128 * 1000 / 16_000;
     let model_path = settings.model_path.clone();
     // Whisper is CPU-bound; keep it off the async runtime's worker threads.
     let transcribed = tauri::async_runtime::spawn_blocking(move || {
         transcribe::transcribe(&samples, &model_path)
     })
     .await;
+    eprintln!(
+        "[quietype] {audio_ms}ms audio -> transcribed in {:?}",
+        t0.elapsed()
+    );
 
     let transcript = match transcribed {
         Ok(Ok(t)) if !t.is_empty() => t,
@@ -198,6 +180,7 @@ async fn process(app: AppHandle, mode: Mode, samples: Vec<f32>) {
         return fade_out(app, 3600);
     }
 
+    eprintln!("[quietype] key-up to typed: {:?}", t0.elapsed());
     store::push_history(&app, mode.as_str(), &transcript, &output);
     let _ = app.emit_to(MAIN_LABEL, "history-changed", ());
     fade_out(app, 900);
@@ -242,24 +225,6 @@ fn model_exists(path: String) -> bool {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(AppState {
-            active: Mutex::new(None),
-        })
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
-                    if event.state != ShortcutState::Pressed {
-                        return;
-                    }
-                    // Assistant first: its modifier set is a superset of dictate's.
-                    if shortcut.matches(assistant_modifiers(), HOTKEY_TRIGGER) {
-                        toggle(app, Mode::Assistant);
-                    } else if shortcut.matches(dictate_modifiers(), HOTKEY_TRIGGER) {
-                        toggle(app, Mode::Dictate);
-                    }
-                })
-                .build(),
-        )
         .invoke_handler(tauri::generate_handler![
             get_settings,
             set_settings,
@@ -303,7 +268,7 @@ pub fn run() {
 
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("quietype — Win+Ctrl+` to dictate")
+                .tooltip("quietype — hold Win+Ctrl to dictate")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -323,17 +288,12 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            handle
-                .global_shortcut()
-                .register(Shortcut::new(Some(dictate_modifiers()), HOTKEY_TRIGGER))?;
-            handle
-                .global_shortcut()
-                .register(Shortcut::new(Some(assistant_modifiers()), HOTKEY_TRIGGER))?;
+            hotkeys::spawn(handle.clone());
 
             // Pay the model-load cost now, not on the user's first dictation.
             transcribe::warm(&store::load_settings(&handle).model_path);
 
-            eprintln!("[quietype] ready — Win+Ctrl+` dictate, Win+Ctrl+Shift+` assistant");
+            eprintln!("[quietype] ready — hold Win+Ctrl to dictate, Win+Ctrl+Shift for assistant");
             Ok(())
         })
         .on_window_event(|window, event| {

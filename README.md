@@ -1,11 +1,11 @@
 # quietype
 
-**Local-first, open-source desktop dictation + assistant.** Two hotkeys, one voice pipeline:
+**Local-first, open-source desktop dictation + assistant.** Two press-and-hold hotkeys, one voice pipeline:
 
-- **`Win`+`Ctrl`+`` ` `` — Dictate.** Press, speak, press again. Transcribed locally, typed verbatim wherever your cursor is.
-- **`Win`+`Ctrl`+`Shift`+`` ` `` — Assistant.** Press, speak an instruction ("make this more professional", "answer this using my resume"), press again. Your selected text becomes context, Claude does the edit/fill, the result gets typed in.
+- **Hold `Win`+`Ctrl` — Dictate.** Speak, let go. Transcribed locally, typed verbatim wherever your cursor is.
+- **Hold `Win`+`Ctrl`+`Shift` — Assistant.** Speak an instruction ("make this more professional", "answer this using my resume"), let go. Your selected text becomes context, Claude does the edit/fill, the result gets typed in.
 
-Both hotkeys share the same local speech-to-text engine — the only difference is what happens to the transcript: typed as-is, or handed to an LLM as an instruction.
+Both hotkeys share the same local speech-to-text engine — the only difference is what happens to the transcript: typed as-is, or handed to an LLM as an instruction. Both are hold-to-talk: key-down starts recording, key-up stops it, no toggle to remember.
 
 ## Why
 
@@ -21,7 +21,7 @@ quietype's bet: local-model transcription is now good enough (Parakeet/Whisper-c
 | | quietype | Wispr Flow | Superwhisper |
 |---|---|---|---|
 | Processing | Local by default | Cloud only | Local |
-| Platforms | Windows, macOS, Linux | Mac, Win, iOS, Android | Mac, iOS |
+| Platforms | Windows today, Linux/Mac targeted | Mac, Win, iOS, Android | Mac, iOS |
 | Open source | Yes | No | No |
 | Streaming transcription | Planned | No | No |
 | Pricing | Free | $12–15/mo | $8.49/mo or $249 lifetime |
@@ -51,12 +51,25 @@ Not done yet: streaming partial transcripts, rebindable hotkeys, packaging.
   appears during dictation is a 340×64 overlay pill, which is created once at
   startup and shown/hidden — so there's no window cold-start between pressing
   the hotkey and seeing feedback.
+- **Hotkeys are a raw low-level keyboard hook, not `RegisterHotKey`.** A pure
+  modifier chord (Win+Ctrl, no third key) has no VK code to register as a
+  trigger through Windows' classic hotkey API — watching raw key state
+  ourselves is the only way to get both that chord *and* press-and-hold
+  semantics (key-down starts recording, key-up stops it, no toggle). This is
+  Windows-specific (`hotkeys.rs` calls Win32 directly) — the project is
+  Windows-only again for the moment, until an equivalent low-level watcher
+  exists for macOS (CGEventTap) and Linux (varies by X11/Wayland).
 - **The overlay can't take focus** (`focusable(false)`). Text injection works by
   pasting into whatever window is focused, so an overlay that stole focus would
   paste into itself.
 - **The model is loaded at startup**, not on first use, so the first dictation
   doesn't pay a one-off model-load cost on top of its own latency.
 - **Transcription runs on a blocking thread pool**, off the async runtime.
+- **Silence is trimmed before transcription.** Hold-to-talk removes the
+  "reaction time before pressing stop" problem toggle-based recording had, but
+  leading/trailing near-silence is still trimmed — it's what makes Whisper
+  hallucinate tokens like `[BLANK_AUDIO]`, and less audio means less to
+  transcribe.
 
 ## Stack
 

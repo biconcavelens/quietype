@@ -14,12 +14,15 @@ pub fn type_text(text: &str) -> Result<(), String> {
     let previous = clipboard.get_text().ok();
 
     clipboard.set_text(text.to_string()).map_err(|e| e.to_string())?;
-    sleep(Duration::from_millis(50));
+    // Windows' clipboard needs a beat to actually commit before Ctrl+V reads
+    // it back -- below this, paste intermittently grabs the previous content.
+    sleep(Duration::from_millis(15));
 
     paste()?;
 
     if let Some(prev) = previous {
-        sleep(Duration::from_millis(200));
+        // Only needs to outlast the paste's own read of the clipboard.
+        sleep(Duration::from_millis(60));
         let _ = clipboard.set_text(prev);
     }
     Ok(())
@@ -32,7 +35,10 @@ pub fn capture_selection() -> Result<String, String> {
     let _ = clipboard.clear();
 
     copy()?;
-    sleep(Duration::from_millis(150));
+    // Assistant mode only, so this cost isn't on dictation's hot path. Kept
+    // more conservative than the paste delay above: this waits on an
+    // arbitrary target app to respond to Ctrl+C, not just our own paste.
+    sleep(Duration::from_millis(80));
 
     let selected = clipboard.get_text().unwrap_or_default();
 
