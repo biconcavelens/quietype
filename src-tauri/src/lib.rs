@@ -117,21 +117,31 @@ pub(crate) fn begin_recording(app: &AppHandle, mode: Mode) -> Option<audio::Reco
     let (level_tx, level_rx) = mpsc::channel::<f32>();
     match audio::start_recording(level_tx) {
         Ok(handle) => {
+            eprintln!("[quietype] begin_recording({mode:?})");
             show_overlay(app);
             emit_state(app, "recording", mode, None);
 
             // Forward mic levels to the overlay until capture ends and the
             // sender is dropped.
+            // ponytail: temporary diagnostic counter/log -- remove once
+            // confirmed the overlay is actually receiving these.
             let app_levels = app.clone();
             thread::spawn(move || {
+                let mut count = 0u32;
                 while let Ok(level) = level_rx.recv() {
+                    count += 1;
+                    if count % 15 == 0 {
+                        eprintln!("[quietype] level #{count}: {level:.3}");
+                    }
                     let _ = app_levels.emit("overlay-level", level);
                 }
+                eprintln!("[quietype] level stream ended after {count} samples");
             });
 
             Some(handle)
         }
         Err(e) => {
+            eprintln!("[quietype] begin_recording failed: {e}");
             show_overlay(app);
             emit_state(app, "error", mode, Some(e));
             fade_out(app.clone(), 2600);
@@ -142,6 +152,7 @@ pub(crate) fn begin_recording(app: &AppHandle, mode: Mode) -> Option<audio::Reco
 
 /// Called by the hotkeys module when a required key comes back up.
 pub(crate) fn end_recording(app: &AppHandle, mode: Mode, handle: audio::RecordingHandle) {
+    eprintln!("[quietype] end_recording({mode:?})");
     emit_state(app, "transcribing", mode, None);
     let samples = handle.stop();
     let app = app.clone();
