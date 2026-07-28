@@ -146,6 +146,7 @@ pub(crate) fn begin_recording(app: &AppHandle, mode: Mode) -> Option<audio::Reco
                     let now_active = level > ACTIVE_THRESHOLD;
                     if now_active != active {
                         active = now_active;
+                        eprintln!("[quietype] overlay-active -> {active}");
                         let _ = app_levels.emit("overlay-active", active);
                     }
                 }

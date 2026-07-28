@@ -158,22 +158,24 @@ body {
 .bar {
   flex: none;
   width: 3px;
-  height: 3px;
+  height: 6px;
   border-radius: 1.5px;
   background: var(--tone);
+  opacity: 0.8;
 }
 
 .wave.active .bar {
+  opacity: 1;
   animation: bounce 0.6s ease-in-out infinite;
 }
 
 @keyframes bounce {
   0%,
   100% {
-    height: 3px;
+    height: 6px;
   }
   50% {
-    height: 16px;
+    height: 20px;
   }
 }
 
