@@ -109,7 +109,8 @@ pub fn start_recording(level_tx: mpsc::Sender<f32>) -> Result<RecordingHandle, S
         let raw = buffer.lock().unwrap().clone();
         let mono = downmix(&raw, channels);
         let resampled = resample_linear(&mono, sample_rate, TARGET_SAMPLE_RATE);
-        let _ = result_tx.send(resampled);
+        let trimmed = trim_silence(&resampled);
+        let _ = result_tx.send(trimmed);
     });
 
     ready_rx.recv().map_err(|e| e.to_string())??;
@@ -125,6 +126,33 @@ impl RecordingHandle {
         let _ = self.stop_tx.send(());
         self.result_rx.recv().unwrap_or_default()
     }
+}
+
+// ponytail: fixed amplitude threshold rather than a noise-floor estimate.
+// Good enough for a quiet room; revisit if users on noisy mics report real
+// speech getting clipped.
+const SILENCE_THRESHOLD: f32 = 0.02;
+/// Padding kept on each side of detected speech so words aren't clipped.
+const SILENCE_PAD_MS: usize = 200;
+
+/// Drops leading/trailing near-silence. The toggle-to-stop UX means whatever
+/// gap there is between finishing a sentence and pressing the hotkey again
+/// gets recorded too -- that trailing silence is exactly what makes whisper
+/// hallucinate tokens like "[BLANK_AUDIO]", and trimming it also shrinks how
+/// much audio there is to transcribe.
+fn trim_silence(samples: &[f32]) -> Vec<f32> {
+    let Some(start) = samples.iter().position(|s| s.abs() > SILENCE_THRESHOLD) else {
+        return Vec::new(); // nothing but silence
+    };
+    let end = samples
+        .iter()
+        .rposition(|s| s.abs() > SILENCE_THRESHOLD)
+        .unwrap_or(start);
+
+    let pad = SILENCE_PAD_MS * (TARGET_SAMPLE_RATE as usize) / 1000;
+    let start = start.saturating_sub(pad);
+    let end = (end + pad).min(samples.len() - 1);
+    samples[start..=end].to_vec()
 }
 
 /// RMS loudness, scaled into a 0..1 range that looks reasonable on a meter.
@@ -192,5 +220,24 @@ mod tests {
         let input: Vec<f32> = (0..100).map(|i| i as f32).collect();
         assert_eq!(resample_linear(&input, 32_000, 16_000).len(), 50);
         assert_eq!(resample_linear(&input, 16_000, 16_000).len(), 100);
+    }
+
+    #[test]
+    fn trim_silence_drops_padding_but_keeps_speech() {
+        let pad = 8_000; // 500ms of silence on each side at 16kHz
+        let mut samples = vec![0.0; pad];
+        samples.extend(vec![0.5; 4_000]); // ~250ms of "speech"
+        samples.extend(vec![0.0; pad]);
+
+        let trimmed = trim_silence(&samples);
+        assert!(trimmed.len() < samples.len());
+        assert!(trimmed.len() >= 4_000);
+        // The loud region should still be present, not chopped out.
+        assert!(trimmed.iter().any(|s| *s > 0.4));
+    }
+
+    #[test]
+    fn trim_silence_of_pure_silence_is_empty() {
+        assert_eq!(trim_silence(&[0.0; 1000]), Vec::<f32>::new());
     }
 }

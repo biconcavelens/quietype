@@ -81,5 +81,49 @@ pub fn transcribe(samples: &[f32], model_path: &str) -> Result<String, String> {
             text.push_str(&segment.to_str_lossy().map_err(|e| e.to_string())?);
         }
     }
-    Ok(text.trim().to_string())
+    Ok(strip_non_speech_tags(&text))
+}
+
+/// Whisper describes non-speech audio with literal bracketed/parenthetical
+/// text -- "[BLANK_AUDIO]", "[MUSIC]", "(background noise)" -- rather than a
+/// control token, so param-level suppression doesn't catch it. Trimming
+/// silence in audio.rs makes this rare; this is the safety net for what
+/// still slips through (breathing, a stray click, etc).
+fn strip_non_speech_tags(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut depth: i32 = 0;
+    for ch in text.chars() {
+        match ch {
+            '[' | '(' => depth += 1,
+            ']' | ')' => depth = (depth - 1).max(0),
+            _ if depth == 0 => out.push(ch),
+            _ => {}
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_bracketed_and_parenthetical_tags() {
+        assert_eq!(
+            strip_non_speech_tags("Hello, hello, hello.[BLANK_AUDIO]"),
+            "Hello, hello, hello."
+        );
+        assert_eq!(
+            strip_non_speech_tags("(background noise) turn left at the light"),
+            "turn left at the light"
+        );
+    }
+
+    #[test]
+    fn leaves_normal_text_untouched() {
+        assert_eq!(
+            strip_non_speech_tags("just a normal sentence, no tags here"),
+            "just a normal sentence, no tags here"
+        );
+    }
 }
