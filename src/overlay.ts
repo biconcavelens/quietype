@@ -10,15 +10,12 @@ interface StateEvent {
   text: string | null;
 }
 
-const BAR_COUNT = 34;
+const BAR_COUNT = 12;
 
 const pill = document.getElementById("pill") as HTMLDivElement;
 const wave = document.getElementById("wave") as HTMLDivElement;
 const text = document.getElementById("text") as HTMLDivElement;
 const badge = document.getElementById("badge") as HTMLDivElement;
-// ponytail: temporary diagnostic strip, remove alongside #debug in
-// overlay.html once the animation bug is found.
-const debug = document.getElementById("debug") as HTMLDivElement;
 
 /** Maps backend phase names to the CSS class that drives the whole pill. */
 const PHASE_CLASS: Record<Phase, string> = {
@@ -29,45 +26,15 @@ const PHASE_CLASS: Record<Phase, string> = {
   error: "error",
 };
 
-const bars: HTMLDivElement[] = [];
 for (let i = 0; i < BAR_COUNT; i++) {
   const bar = document.createElement("div");
   bar.className = "bar";
+  // Staggered animation-delay per bar is what makes the CSS keyframe (in
+  // overlay.css) read as a lively equalizer instead of every bar moving in
+  // lockstep -- driven entirely by CSS, no per-frame JS involved.
+  bar.style.animationDelay = `${(i / BAR_COUNT) * 0.6}s`;
   wave.appendChild(bar);
-  bars.push(bar);
 }
-
-/** Latest level from the audio thread, sampled once per frame. */
-let level = 0;
-let listening = false;
-const trail: number[] = new Array(BAR_COUNT).fill(0);
-
-// ponytail: temporary diagnostic state, remove alongside #debug.
-let frame = 0;
-let levelEventCount = 0;
-let stateEventCount = 0;
-let lastPhase = "(none yet)";
-
-// Mic levels arrive far faster than the screen refreshes, so the event handler
-// only stores the newest value and rendering happens on rAF.
-function render() {
-  frame++;
-  if (listening) {
-    trail.push(level);
-    trail.shift();
-    for (let i = 0; i < BAR_COUNT; i++) {
-      // Taper the ends so the waveform reads as a shape, not a block.
-      const taper = Math.sin((i / (BAR_COUNT - 1)) * Math.PI) * 0.5 + 0.5;
-      bars[i].style.height = `${3 + trail[i] * taper * 16}px`;
-    }
-  }
-  debug.textContent =
-    `frame=${frame} listening=${listening} level=${level.toFixed(3)}\n` +
-    `stateEvents=${stateEventCount} levelEvents=${levelEventCount} lastPhase=${lastPhase}\n` +
-    `pill.className="${pill.className}"`;
-  requestAnimationFrame(render);
-}
-requestAnimationFrame(render);
 
 function truncate(value: string, max = 48): string {
   const clean = value.replace(/\s+/g, " ").trim();
@@ -75,14 +42,13 @@ function truncate(value: string, max = 48): string {
 }
 
 function apply(state: StateEvent) {
-  stateEventCount++;
-  lastPhase = state.phase;
-
   const phaseClass = PHASE_CLASS[state.phase];
   if (!phaseClass) return;
 
-  listening = state.phase === "recording";
-  if (listening) trail.fill(0);
+  // Dropped mid-recording state (still recording, just no longer "active")
+  // when a new phase arrives -- listening ends whenever a real state change
+  // happens, so this can't get stuck on.
+  wave.classList.remove("active");
 
   pill.className = `pill ${phaseClass}`;
   pill.dataset.mode = state.mode;
@@ -95,9 +61,14 @@ function apply(state: StateEvent) {
   }
 }
 
-listen<number>("overlay-level", (event) => {
-  levelEventCount++;
-  level = event.payload;
+// Continuous mic-level streaming (100+ events/sec) never arrived at all --
+// confirmed via a diagnostic counter that Tauri's plain emit/listen silently
+// drops it at that rate, even after throttling to 30Hz. This only fires on
+// a threshold crossing (silence <-> speech), which happens a few times a
+// second at most -- comfortably inside the range overlay-state already
+// proves works.
+listen<boolean>("overlay-active", (event) => {
+  wave.classList.toggle("active", event.payload);
 });
 
 listen<StateEvent>("overlay-state", (event) => {

@@ -19,32 +19,16 @@ body {
 
 body {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
-  gap: 4px;
   padding: 5px;
   font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
     sans-serif;
 }
 
-/* ponytail: temporary diagnostic strip, remove alongside the #debug element
-   in overlay.html once the animation bug is found. */
-#debug {
-  flex: none;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 10px;
-  line-height: 1.3;
-  color: #7CFC00;
-  background: black;
-  padding: 2px 4px;
-  white-space: pre;
-  overflow: hidden;
-}
-
 .pill {
   width: 100%;
-  height: 30px;
+  height: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -164,14 +148,33 @@ body {
 /* Fixed bars rather than flex-filled ones: at this width flex makes them
    wide enough to read as blocks instead of a waveform. Solid, full-opacity
    fill and a 3px floor (not 2px) so the mark reads as bold and deliberate
-   even at rest, closer to a drawn icon than a faint hairline readout. */
+   even at rest, closer to a drawn icon than a faint hairline readout.
+   Reacting to actual mic amplitude turned out to require continuous IPC at
+   100+ events/sec, which Tauri's plain emit/listen silently drops -- these
+   just sit flat until a rare threshold-crossing signal says to animate, at
+   which point a staggered CSS keyframe (each bar gets its own
+   animation-delay, set in overlay.ts) makes them bounce like an equalizer.
+   No per-frame JS or continuous data involved either way. */
 .bar {
   flex: none;
   width: 3px;
   height: 3px;
   border-radius: 1.5px;
   background: var(--tone);
-  transition: height 60ms linear;
+}
+
+.wave.active .bar {
+  animation: bounce 0.6s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%,
+  100% {
+    height: 3px;
+  }
+  50% {
+    height: 16px;
+  }
 }
 
 /* processing: rolling swell */

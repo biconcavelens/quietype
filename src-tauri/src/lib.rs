@@ -16,10 +16,8 @@ use tauri::{
 
 const MAIN_LABEL: &str = "main";
 const OVERLAY_LABEL: &str = "overlay";
-// ponytail: temporarily taller for the #debug diagnostic strip in
-// overlay.html/css -- revert to 40.0 once the animation bug is found.
 const OVERLAY_W: f64 = 240.0;
-const OVERLAY_H: f64 = 105.0;
+const OVERLAY_H: f64 = 40.0;
 /// Gap between the overlay pill and the bottom of the screen.
 const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 
@@ -28,15 +26,12 @@ const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 // connection. The msWebOOUI/msPdfOOUI flags are Tauri's own defaults, repeated
 // here because setting this option replaces them.
 //
-// The three --disable-*-backgrounding/-throttling flags matter specifically
-// for the overlay: it's focusable(false) by design (so it never steals focus
-// from whatever you're dictating into), which means it never has OS focus --
-// and Chromium throttles rAF/CSS animations for renderers it considers
-// backgrounded, focus being one of the signals it uses. Confirmed via
-// diagnostic logging that the backend emits real, varying mic levels the
-// whole time; the overlay's phase/text/color updates (plain DOM writes) were
-// visibly working while bar height and the sea-swell animation (both actual
-// motion) weren't -- exactly the split this class of throttling produces.
+// The three --disable-*-backgrounding/-throttling flags were an attempt at
+// fixing the overlay's animations not running (it's focusable(false), so it
+// never has OS focus, which is one signal Chromium uses to throttle
+// backgrounded renderers) -- turned out not to be the actual cause (see
+// overlay-active in begin_recording), but left in since a window that
+// intentionally never takes focus is exactly the case they exist for.
 const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
      --proxy-server=direct:// --proxy-bypass-list=* \
      --disable-background-timer-throttling --disable-backgrounding-occluded-windows \
@@ -135,33 +130,25 @@ pub(crate) fn begin_recording(app: &AppHandle, mode: Mode) -> Option<audio::Reco
             show_overlay(app);
             emit_state(app, "recording", mode, None);
 
-            // Forward mic levels to the overlay until capture ends and the
-            // sender is dropped. Throttled to ~30Hz: the audio callback fires
-            // ~100+ times/second (confirmed via diagnostic logging showing
-            // real values arriving that often), but Tauri's plain emit/listen
-            // is documented as the wrong tool for that rate -- streaming data
-            // is supposed to go over a dedicated Channel instead. A UI redraw
-            // doesn't need to happen faster than the screen refreshes anyway,
-            // so dropping most samples and only emitting the latest one on a
-            // timer is strictly better, not just a workaround.
-            // ponytail: temporary diagnostic counter/log -- remove once
-            // confirmed the overlay is actually receiving these.
+            // Continuous mic-level streaming (100+ events/sec, confirmed via
+            // a diagnostic counter that Tauri's plain emit/listen silently
+            // drops that entirely, even throttled to 30Hz) is abandoned in
+            // favor of a much rarer signal: only emit when loudness crosses
+            // a threshold, i.e. silence <-> speech, which happens at most a
+            // few times a second -- comfortably inside the rate overlay-state
+            // already proves works. The overlay just plays a fixed CSS
+            // animation while "active" instead of following exact amplitude.
+            const ACTIVE_THRESHOLD: f32 = 0.08;
             let app_levels = app.clone();
             thread::spawn(move || {
-                let mut count = 0u32;
-                let mut last_emit = std::time::Instant::now();
-                const MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
-
+                let mut active = false;
                 while let Ok(level) = level_rx.recv() {
-                    count += 1;
-                    if last_emit.elapsed() < MIN_INTERVAL {
-                        continue;
+                    let now_active = level > ACTIVE_THRESHOLD;
+                    if now_active != active {
+                        active = now_active;
+                        let _ = app_levels.emit("overlay-active", active);
                     }
-                    last_emit = std::time::Instant::now();
-                    eprintln!("[quietype] level #{count} (throttled): {level:.3}");
-                    let _ = app_levels.emit("overlay-level", level);
                 }
-                eprintln!("[quietype] level stream ended after {count} samples");
             });
 
             Some(handle)
