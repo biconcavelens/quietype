@@ -25,8 +25,20 @@ const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 // stale proxy entry makes it hang loading the dev server. Force a direct
 // connection. The msWebOOUI/msPdfOOUI flags are Tauri's own defaults, repeated
 // here because setting this option replaces them.
+//
+// The three --disable-*-backgrounding/-throttling flags matter specifically
+// for the overlay: it's focusable(false) by design (so it never steals focus
+// from whatever you're dictating into), which means it never has OS focus --
+// and Chromium throttles rAF/CSS animations for renderers it considers
+// backgrounded, focus being one of the signals it uses. Confirmed via
+// diagnostic logging that the backend emits real, varying mic levels the
+// whole time; the overlay's phase/text/color updates (plain DOM writes) were
+// visibly working while bar height and the sea-swell animation (both actual
+// motion) weren't -- exactly the split this class of throttling produces.
 const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
-     --proxy-server=direct:// --proxy-bypass-list=*";
+     --proxy-server=direct:// --proxy-bypass-list=* \
+     --disable-background-timer-throttling --disable-backgrounding-occluded-windows \
+     --disable-renderer-backgrounding";
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize)]
 #[serde(rename_all = "lowercase")]
