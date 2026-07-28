@@ -16,8 +16,10 @@ use tauri::{
 
 const MAIN_LABEL: &str = "main";
 const OVERLAY_LABEL: &str = "overlay";
+// ponytail: temporarily taller for the #debug diagnostic strip in
+// overlay.html/css -- revert to 40.0 once the animation bug is found.
 const OVERLAY_W: f64 = 240.0;
-const OVERLAY_H: f64 = 40.0;
+const OVERLAY_H: f64 = 105.0;
 /// Gap between the overlay pill and the bottom of the screen.
 const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 

@@ -19,16 +19,32 @@ body {
 
 body {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: center;
+  gap: 4px;
   padding: 5px;
   font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
     sans-serif;
 }
 
+/* ponytail: temporary diagnostic strip, remove alongside the #debug element
+   in overlay.html once the animation bug is found. */
+#debug {
+  flex: none;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.3;
+  color: #7CFC00;
+  background: black;
+  padding: 2px 4px;
+  white-space: pre;
+  overflow: hidden;
+}
+
 .pill {
   width: 100%;
-  height: 100%;
+  height: 30px;
   display: flex;
   align-items: center;
   gap: 8px;

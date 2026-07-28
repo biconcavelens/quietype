@@ -16,6 +16,9 @@ const pill = document.getElementById("pill") as HTMLDivElement;
 const wave = document.getElementById("wave") as HTMLDivElement;
 const text = document.getElementById("text") as HTMLDivElement;
 const badge = document.getElementById("badge") as HTMLDivElement;
+// ponytail: temporary diagnostic strip, remove alongside #debug in
+// overlay.html once the animation bug is found.
+const debug = document.getElementById("debug") as HTMLDivElement;
 
 /** Maps backend phase names to the CSS class that drives the whole pill. */
 const PHASE_CLASS: Record<Phase, string> = {
@@ -39,9 +42,16 @@ let level = 0;
 let listening = false;
 const trail: number[] = new Array(BAR_COUNT).fill(0);
 
+// ponytail: temporary diagnostic state, remove alongside #debug.
+let frame = 0;
+let levelEventCount = 0;
+let stateEventCount = 0;
+let lastPhase = "(none yet)";
+
 // Mic levels arrive far faster than the screen refreshes, so the event handler
 // only stores the newest value and rendering happens on rAF.
 function render() {
+  frame++;
   if (listening) {
     trail.push(level);
     trail.shift();
@@ -51,6 +61,10 @@ function render() {
       bars[i].style.height = `${3 + trail[i] * taper * 16}px`;
     }
   }
+  debug.textContent =
+    `frame=${frame} listening=${listening} level=${level.toFixed(3)}\n` +
+    `stateEvents=${stateEventCount} levelEvents=${levelEventCount} lastPhase=${lastPhase}\n` +
+    `pill.className="${pill.className}"`;
   requestAnimationFrame(render);
 }
 requestAnimationFrame(render);
@@ -61,6 +75,9 @@ function truncate(value: string, max = 48): string {
 }
 
 function apply(state: StateEvent) {
+  stateEventCount++;
+  lastPhase = state.phase;
+
   const phaseClass = PHASE_CLASS[state.phase];
   if (!phaseClass) return;
 
@@ -79,6 +96,7 @@ function apply(state: StateEvent) {
 }
 
 listen<number>("overlay-level", (event) => {
+  levelEventCount++;
   level = event.payload;
 });
 
