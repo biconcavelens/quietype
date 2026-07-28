@@ -16,8 +16,8 @@ use tauri::{
 
 const MAIN_LABEL: &str = "main";
 const OVERLAY_LABEL: &str = "overlay";
-const OVERLAY_W: f64 = 296.0;
-const OVERLAY_H: f64 = 52.0;
+const OVERLAY_W: f64 = 240.0;
+const OVERLAY_H: f64 = 40.0;
 /// Gap between the overlay pill and the bottom of the screen.
 const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 

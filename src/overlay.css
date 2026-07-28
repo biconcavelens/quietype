@@ -21,7 +21,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
+  padding: 5px;
   font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
     sans-serif;
 }
@@ -31,25 +31,21 @@ body {
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 11px;
+  gap: 8px;
+  padding: 0 9px;
   border-radius: 999px;
   background: var(--bg);
-  border: 1px solid var(--border-strong);
-  /* A neutral drop shadow plus a soft ring in the current tone -- the ring
-     is what gives this a "badge that was designed" feel instead of a plain
-     translucent status bar. Both layers change together via --tone-glow. */
-  /* Spread capped at 3px: the window itself is only 6px larger than the
-     pill on each side, and anything drawn past the window's edge is
-     clipped outright (this isn't a scrollable page, it's a fixed OS
-     rectangle) -- unlike a normal box-shadow overrun, that would look
-     like a flat-cut ring rather than a soft glow. */
-  box-shadow: var(--shadow), 0 0 0 3px var(--tone-glow);
+  /* The border itself carries the phase color -- tried a colored glow ring
+     via box-shadow first, but with 0 blur it's just a hard-edged outline,
+     and real blur needs more clipping margin than a window this close to
+     the pill's own size can give without hard-cutting it. Border color is
+     simpler and reads cleanly at this size. */
+  border: 1.5px solid var(--tone);
+  box-shadow: var(--shadow);
   animation: rise 140ms cubic-bezier(0.22, 1, 0.36, 1);
-  transition: box-shadow 200ms ease;
-  /* Per-phase accent; every child reads from these two. */
+  transition: border-color 200ms ease;
+  /* Per-phase accent; every child reads from this. */
   --tone: var(--cyan);
-  --tone-glow: rgba(42, 161, 152, 0.14);
 }
 
 @keyframes rise {
@@ -67,34 +63,29 @@ body {
 
 .pill.listening {
   --tone: var(--cyan);
-  --tone-glow: rgba(42, 161, 152, 0.16);
 }
 
 .pill.transcribing,
 .pill.thinking {
   --tone: var(--violet);
-  --tone-glow: rgba(108, 113, 196, 0.16);
 }
 
 .pill.done {
   --tone: var(--green);
-  --tone-glow: rgba(133, 153, 0, 0.16);
 }
 
 .pill.error {
   --tone: var(--red);
-  --tone-glow: rgba(220, 50, 47, 0.18);
 }
 
 /* ---- status dot ------------------------------------------------------ */
 
 .dot {
   flex: none;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--tone);
-  box-shadow: 0 0 8px var(--tone-glow);
 }
 
 .pill.listening .dot {
