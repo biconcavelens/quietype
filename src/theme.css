@@ -26,8 +26,32 @@
   --cyan: #2aa198;
   --green: #859900;
 
+  /* Type scale. Named for role, not size, so a component's CSS says what it
+     is rather than a number that has to be looked up. */
+  --text-xs: 11px; /* eyebrows, meta, timestamps */
+  --text-sm: 12.5px; /* hints, secondary body */
+  --text-base: 14px; /* primary body */
+  --text-md: 15px; /* section labels, emphasis */
+  --text-lg: 17px; /* window title */
+
+  /* Spacing scale (4px base unit). Every gap/padding in the app should be
+     one of these -- if a component needs something between two steps, that's
+     a sign the layout needs rethinking, not a new value. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 28px;
+
+  --radius-sm: 7px;
   --radius: 10px;
   --radius-lg: 14px;
+  --radius-full: 999px;
+
+  /* Reading measure: caps line length in the history feed so a one-sentence
+     dictation doesn't stretch across the full window width. */
+  --measure: 640px;
 }
 
 /* Dark is the default so an unresolved theme never flashes white. */
