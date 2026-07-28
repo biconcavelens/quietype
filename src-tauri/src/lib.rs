@@ -136,17 +136,29 @@ pub(crate) fn begin_recording(app: &AppHandle, mode: Mode) -> Option<audio::Reco
             emit_state(app, "recording", mode, None);
 
             // Forward mic levels to the overlay until capture ends and the
-            // sender is dropped.
+            // sender is dropped. Throttled to ~30Hz: the audio callback fires
+            // ~100+ times/second (confirmed via diagnostic logging showing
+            // real values arriving that often), but Tauri's plain emit/listen
+            // is documented as the wrong tool for that rate -- streaming data
+            // is supposed to go over a dedicated Channel instead. A UI redraw
+            // doesn't need to happen faster than the screen refreshes anyway,
+            // so dropping most samples and only emitting the latest one on a
+            // timer is strictly better, not just a workaround.
             // ponytail: temporary diagnostic counter/log -- remove once
             // confirmed the overlay is actually receiving these.
             let app_levels = app.clone();
             thread::spawn(move || {
                 let mut count = 0u32;
+                let mut last_emit = std::time::Instant::now();
+                const MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
+
                 while let Ok(level) = level_rx.recv() {
                     count += 1;
-                    if count % 15 == 0 {
-                        eprintln!("[quietype] level #{count}: {level:.3}");
+                    if last_emit.elapsed() < MIN_INTERVAL {
+                        continue;
                     }
+                    last_emit = std::time::Instant::now();
+                    eprintln!("[quietype] level #{count} (throttled): {level:.3}");
                     let _ = app_levels.emit("overlay-level", level);
                 }
                 eprintln!("[quietype] level stream ended after {count} samples");
