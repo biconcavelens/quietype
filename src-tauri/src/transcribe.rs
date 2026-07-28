@@ -23,7 +23,7 @@ pub fn warm(model_path: &str) {
     });
 }
 
-fn ensure_loaded(model_path: &str) -> Result<(), String> {
+pub fn ensure_loaded(model_path: &str) -> Result<(), String> {
     let mut guard = cell().lock().map_err(|_| "model lock poisoned".to_string())?;
 
     let already_loaded = guard.as_ref().map(|l| l.path == model_path).unwrap_or(false);
@@ -67,10 +67,22 @@ pub fn transcribe(samples: &[f32], model_path: &str) -> Result<String, String> {
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
     params.set_suppress_blank(true);
-    // Use all but one core so the UI thread stays responsive while decoding.
-    let threads = std::thread::available_parallelism()
-        .map(|n| (n.get() as i32 - 1).max(1))
-        .unwrap_or(4);
+    // "All available cores minus one" is wrong on hybrid CPUs (P-cores +
+    // efficiency cores): ggml's thread pool has no concept of core
+    // heterogeneity, so spreading work onto slow E-cores makes a
+    // synchronized parallel matmul wait on its slowest thread. Measured on a
+    // 16-core/22-thread Meteor Lake chip: 21 threads = ~24s, 6 threads =
+    // ~6.9s, 4 threads = ~9.4s for the same clip -- more threads was actively
+    // *worse* past a fairly low ceiling. Can be overridden for tuning.
+    let threads = std::env::var("QUIETYPE_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get() as i32)
+                .unwrap_or(6)
+                .min(6)
+        });
     params.set_n_threads(threads);
 
     state.full(params, samples).map_err(|e| e.to_string())?;

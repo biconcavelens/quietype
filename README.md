@@ -65,6 +65,14 @@ Not done yet: streaming partial transcripts, rebindable hotkeys, packaging.
 - **The model is loaded at startup**, not on first use, so the first dictation
   doesn't pay a one-off model-load cost on top of its own latency.
 - **Transcription runs on a blocking thread pool**, off the async runtime.
+- **Whisper's thread count is capped at 6, not "all available cores minus one."**
+  On a hybrid CPU (performance cores + weaker efficiency cores — most current
+  Intel/Apple/Qualcomm chips), ggml's thread pool has no concept of that
+  heterogeneity: a synchronized parallel matmul waits on its slowest thread, so
+  spilling work onto E-cores makes more threads actively *worse*. Measured on a
+  16-core/22-thread Meteor Lake chip transcribing the same 2s clip: 21 threads
+  → ~24s, 6 threads → ~6.9s, 4 threads → ~9.4s. Overridable via
+  `QUIETYPE_THREADS` for tuning on other hardware.
 - **Silence is trimmed before transcription.** Hold-to-talk removes the
   "reaction time before pressing stop" problem toggle-based recording had, but
   leading/trailing near-silence is still trimmed — it's what makes Whisper

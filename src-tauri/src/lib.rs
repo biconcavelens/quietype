@@ -3,7 +3,7 @@ mod audio;
 mod hotkeys;
 mod inject;
 mod store;
-mod transcribe;
+pub mod transcribe;
 
 use serde::Serialize;
 use std::sync::mpsc;
