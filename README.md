@@ -40,17 +40,24 @@ Superwhisper already covers local + Mac well; quietype's edit is Windows/Linux-f
 ## Status
 
 Working. Lives in the system tray with no window in the way: a floating pill
-appears when you hold a hotkey, shows a live waveform while you talk, and
-disappears once the text lands. A separate window holds history and settings.
+appears when you hold a hotkey, shows the current phase (listening,
+transcribing, thinking, done) by color and label, and disappears once the
+text lands. A separate window holds history and settings.
 
 Not done yet: streaming partial transcripts, rebindable hotkeys, packaging.
 
 ## How it's built
 
 - **No window on the hot path.** The app is a tray process. The only thing that
-  appears during dictation is a 340×64 overlay pill, which is created once at
+  appears during dictation is a 190×40 overlay pill, which is created once at
   startup and shown/hidden — so there's no window cold-start between pressing
   the hotkey and seeing feedback.
+- **The overlay is plain color and text, not a waveform.** A live amplitude
+  meter needs continuous IPC (100+ events/sec from the audio callback); even
+  a much rarer threshold-crossing signal never rendered reliably. Phase
+  color (border + dot) and a short label update instantly on each state
+  change and have worked correctly throughout every version of this UI, so
+  that's the whole design now rather than a fallback.
 - **Hotkeys are a raw low-level keyboard hook, not `RegisterHotKey`.** A pure
   modifier chord (Win+Ctrl, no third key) has no VK code to register as a
   trigger through Windows' classic hotkey API — watching raw key state
@@ -102,7 +109,7 @@ Not done yet: streaming partial transcripts, rebindable hotkeys, packaging.
 ## Roadmap
 
 - [x] Global hotkeys, local inference, text injection, assistant mode
-- [x] Tray app with floating overlay + live waveform
+- [x] Tray app with floating overlay showing phase by color/text
 - [x] History and settings UI
 - [ ] Streaming partial transcripts
 - [ ] Verbatim vs. AI-cleanup toggle for dictation

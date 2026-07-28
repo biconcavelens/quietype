@@ -11,29 +11,7 @@
   <body>
     <div class="pill" id="pill" data-mode="dictate">
       <div class="dot" id="dot"></div>
-
-      <div class="viz">
-        <!-- Listening: bars follow the mic. -->
-        <div class="wave" id="wave"></div>
-
-        <!-- Processing: a rolling swell. Two offset sine paths at different
-             speeds so the motion reads as flowing rather than sliding. The
-             paths are drawn two periods wide and translated by exactly one,
-             which makes the loop seamless. -->
-        <svg class="sea" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true">
-          <path
-            class="swell back"
-            d="M0,11 Q12.5,4 25,11 T50,11 T75,11 T100,11 T125,11 T150,11 T175,11 T200,11"
-          />
-          <path
-            class="swell front"
-            d="M0,11 Q12.5,17 25,11 T50,11 T75,11 T100,11 T125,11 T150,11 T175,11 T200,11"
-          />
-        </svg>
-
-        <div class="text" id="text"></div>
-      </div>
-
+      <div class="text" id="text">Listening</div>
       <div class="badge" id="badge">Dictate</div>
     </div>
   </body>

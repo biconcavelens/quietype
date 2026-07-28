@@ -35,28 +35,14 @@ body {
   padding: 0 9px;
   border-radius: 999px;
   background: var(--bg);
-  /* The border itself carries the phase color -- tried a colored glow ring
-     via box-shadow first, but with 0 blur it's just a hard-edged outline,
-     and real blur needs more clipping margin than a window this close to
-     the pill's own size can give without hard-cutting it. Border color is
-     simpler and reads cleanly at this size. */
+  /* The border itself carries the phase color -- a colored glow ring via
+     box-shadow was tried first, but with 0 blur it's just a hard-edged
+     outline, and real blur needs more clipping margin than a window this
+     close to the pill's own size can give without hard-cutting it. */
   border: 1.5px solid var(--tone);
   box-shadow: var(--shadow);
-  animation: rise 140ms cubic-bezier(0.22, 1, 0.36, 1);
-  transition: border-color 200ms ease;
   /* Per-phase accent; every child reads from this. */
   --tone: var(--cyan);
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 /* ---- phase tones ----------------------------------------------------- */
@@ -88,136 +74,16 @@ body {
   background: var(--tone);
 }
 
-.pill.listening .dot {
-  animation: pulse 1.4s ease-in-out infinite;
-}
+/* ---- text -------------------------------------------------------------
+   Reacting to mic amplitude turned out to need continuous IPC at 100+
+   events/sec, which Tauri's plain emit/listen silently drops -- and even a
+   much rarer threshold-crossing signal never visibly animated either. Text
+   plus the border/dot color (both plain state, no motion) is the one thing
+   that's worked reliably throughout, so that's the whole design now. */
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.45;
-    transform: scale(0.8);
-  }
-}
-
-/* ---- viz ------------------------------------------------------------- */
-
-.viz {
+.text {
   flex: 1;
   min-width: 0;
-  height: 22px;
-  display: flex;
-  align-items: center;
-}
-
-/* Exactly one visualization is live per phase. */
-.wave,
-.sea,
-.text {
-  display: none;
-  width: 100%;
-}
-
-.pill.listening .wave {
-  display: flex;
-}
-
-.pill.transcribing .sea,
-.pill.thinking .sea {
-  display: block;
-}
-
-.pill.done .text,
-.pill.error .text {
-  display: block;
-}
-
-/* listening: minimal centred bars */
-
-.wave {
-  align-items: center;
-  justify-content: space-between;
-  gap: 2px;
-  height: 22px;
-}
-
-/* Fixed bars rather than flex-filled ones: at this width flex makes them
-   wide enough to read as blocks instead of a waveform. Solid, full-opacity
-   fill and a 3px floor (not 2px) so the mark reads as bold and deliberate
-   even at rest, closer to a drawn icon than a faint hairline readout.
-   Reacting to actual mic amplitude turned out to require continuous IPC at
-   100+ events/sec, which Tauri's plain emit/listen silently drops -- these
-   just sit flat until a rare threshold-crossing signal says to animate, at
-   which point a staggered CSS keyframe (each bar gets its own
-   animation-delay, set in overlay.ts) makes them bounce like an equalizer.
-   No per-frame JS or continuous data involved either way. */
-.bar {
-  flex: none;
-  width: 3px;
-  height: 6px;
-  border-radius: 1.5px;
-  background: var(--tone);
-  opacity: 0.8;
-}
-
-.wave.active .bar {
-  opacity: 1;
-  animation: bounce 0.6s ease-in-out infinite;
-}
-
-@keyframes bounce {
-  0%,
-  100% {
-    height: 6px;
-  }
-  50% {
-    height: 20px;
-  }
-}
-
-/* processing: rolling swell */
-
-.sea {
-  height: 22px;
-  overflow: visible;
-}
-
-.swell {
-  fill: none;
-  stroke: var(--tone);
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.swell.back {
-  opacity: 0.4;
-  animation: roll 2.6s linear infinite;
-}
-
-.swell.front {
-  opacity: 1;
-  animation: roll 1.7s linear infinite;
-}
-
-/* One full period is 50 units, so translating by exactly that loops
-   without a visible seam. */
-@keyframes roll {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50px);
-  }
-}
-
-/* result / error text */
-
-.text {
   font-size: var(--text-sm);
   line-height: 1.35;
   color: var(--text);

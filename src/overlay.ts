@@ -10,10 +10,7 @@ interface StateEvent {
   text: string | null;
 }
 
-const BAR_COUNT = 12;
-
 const pill = document.getElementById("pill") as HTMLDivElement;
-const wave = document.getElementById("wave") as HTMLDivElement;
 const text = document.getElementById("text") as HTMLDivElement;
 const badge = document.getElementById("badge") as HTMLDivElement;
 
@@ -26,15 +23,12 @@ const PHASE_CLASS: Record<Phase, string> = {
   error: "error",
 };
 
-for (let i = 0; i < BAR_COUNT; i++) {
-  const bar = document.createElement("div");
-  bar.className = "bar";
-  // Staggered animation-delay per bar is what makes the CSS keyframe (in
-  // overlay.css) read as a lively equalizer instead of every bar moving in
-  // lockstep -- driven entirely by CSS, no per-frame JS involved.
-  bar.style.animationDelay = `${(i / BAR_COUNT) * 0.6}s`;
-  wave.appendChild(bar);
-}
+/** Fixed labels for phases that don't carry their own text from the backend. */
+const PHASE_LABEL: Partial<Record<Phase, string>> = {
+  recording: "Listening",
+  transcribing: "Transcribing",
+  thinking: "Thinking",
+};
 
 function truncate(value: string, max = 48): string {
   const clean = value.replace(/\s+/g, " ").trim();
@@ -45,11 +39,6 @@ function apply(state: StateEvent) {
   const phaseClass = PHASE_CLASS[state.phase];
   if (!phaseClass) return;
 
-  // Dropped mid-recording state (still recording, just no longer "active")
-  // when a new phase arrives -- listening ends whenever a real state change
-  // happens, so this can't get stuck on.
-  wave.classList.remove("active");
-
   pill.className = `pill ${phaseClass}`;
   pill.dataset.mode = state.mode;
   badge.textContent = state.mode === "assistant" ? "Assistant" : "Dictate";
@@ -58,18 +47,10 @@ function apply(state: StateEvent) {
     text.textContent = state.text ? truncate(state.text) : "Inserted";
   } else if (state.phase === "error") {
     text.textContent = state.text ? truncate(state.text, 56) : "Something went wrong";
+  } else {
+    text.textContent = PHASE_LABEL[state.phase] ?? "";
   }
 }
-
-// Continuous mic-level streaming (100+ events/sec) never arrived at all --
-// confirmed via a diagnostic counter that Tauri's plain emit/listen silently
-// drops it at that rate, even after throttling to 30Hz. This only fires on
-// a threshold crossing (silence <-> speech), which happens a few times a
-// second at most -- comfortably inside the range overlay-state already
-// proves works.
-listen<boolean>("overlay-active", (event) => {
-  wave.classList.toggle("active", event.payload);
-});
 
 listen<StateEvent>("overlay-state", (event) => {
   apply(event.payload);

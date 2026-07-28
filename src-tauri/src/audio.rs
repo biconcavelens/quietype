@@ -14,11 +14,7 @@ pub struct RecordingHandle {
 }
 
 /// Starts capturing from the default input device.
-///
-/// `level_tx` receives a 0..1 loudness value per audio callback so the UI can
-/// draw a live waveform. It is dropped when capture ends, which closes the
-/// channel and lets the consumer's loop exit on its own.
-pub fn start_recording(level_tx: mpsc::Sender<f32>) -> Result<RecordingHandle, String> {
+pub fn start_recording() -> Result<RecordingHandle, String> {
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let (result_tx, result_rx) = mpsc::channel::<Vec<f32>>();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
@@ -53,7 +49,6 @@ pub fn start_recording(level_tx: mpsc::Sender<f32>) -> Result<RecordingHandle, S
             cpal::SampleFormat::F32 => device.build_input_stream(
                 &config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    let _ = level_tx.send(level_of(data));
                     buffer_cb.lock().unwrap().extend_from_slice(data);
                 },
                 err_fn,
@@ -63,9 +58,7 @@ pub fn start_recording(level_tx: mpsc::Sender<f32>) -> Result<RecordingHandle, S
                 &config,
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
                     let mut buf = buffer_cb.lock().unwrap();
-                    let start = buf.len();
                     buf.extend(data.iter().map(|s| *s as f32 / i16::MAX as f32));
-                    let _ = level_tx.send(level_of(&buf[start..]));
                 },
                 err_fn,
                 None,
@@ -74,9 +67,7 @@ pub fn start_recording(level_tx: mpsc::Sender<f32>) -> Result<RecordingHandle, S
                 &config,
                 move |data: &[u16], _: &cpal::InputCallbackInfo| {
                     let mut buf = buffer_cb.lock().unwrap();
-                    let start = buf.len();
                     buf.extend(data.iter().map(|s| (*s as f32 - 32768.0) / 32768.0));
-                    let _ = level_tx.send(level_of(&buf[start..]));
                 },
                 err_fn,
                 None,
@@ -155,16 +146,6 @@ fn trim_silence(samples: &[f32]) -> Vec<f32> {
     samples[start..=end].to_vec()
 }
 
-/// RMS loudness, scaled into a 0..1 range that looks reasonable on a meter.
-fn level_of(samples: &[f32]) -> f32 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-    let sum_sq: f32 = samples.iter().map(|s| s * s).sum();
-    let rms = (sum_sq / samples.len() as f32).sqrt();
-    (rms * 4.0).clamp(0.0, 1.0)
-}
-
 fn downmix(samples: &[f32], channels: u16) -> Vec<f32> {
     if channels <= 1 {
         return samples.to_vec();
@@ -200,14 +181,6 @@ fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn silence_is_zero_and_loud_is_capped() {
-        assert_eq!(level_of(&[]), 0.0);
-        assert_eq!(level_of(&[0.0; 64]), 0.0);
-        assert_eq!(level_of(&[1.0; 64]), 1.0);
-        assert!(level_of(&[0.05; 64]) > 0.0);
-    }
 
     #[test]
     fn downmix_averages_channel_pairs() {

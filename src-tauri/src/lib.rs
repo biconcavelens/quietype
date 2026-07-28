@@ -6,7 +6,7 @@ mod store;
 pub mod transcribe;
 
 use serde::Serialize;
-use std::sync::{mpsc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -16,7 +16,7 @@ use tauri::{
 
 const MAIN_LABEL: &str = "main";
 const OVERLAY_LABEL: &str = "overlay";
-const OVERLAY_W: f64 = 240.0;
+const OVERLAY_W: f64 = 190.0;
 const OVERLAY_H: f64 = 40.0;
 /// Gap between the overlay pill and the bottom of the screen.
 const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
@@ -27,11 +27,13 @@ const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 // here because setting this option replaces them.
 //
 // The three --disable-*-backgrounding/-throttling flags were an attempt at
-// fixing the overlay's animations not running (it's focusable(false), so it
-// never has OS focus, which is one signal Chromium uses to throttle
-// backgrounded renderers) -- turned out not to be the actual cause (see
-// overlay-active in begin_recording), but left in since a window that
-// intentionally never takes focus is exactly the case they exist for.
+// fixing CSS/JS animations not rendering in the overlay (focusable(false)
+// means it never has OS focus, which is one signal Chromium uses to
+// throttle backgrounded renderers). Didn't fix it, and the animated
+// waveform they were meant to support has since been dropped entirely in
+// favor of plain text/color state -- left in regardless since a window that
+// intentionally never takes focus is exactly the case they exist for, and
+// they're harmless either way.
 const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
      --proxy-server=direct:// --proxy-bypass-list=* \
      --disable-background-timer-throttling --disable-backgrounding-occluded-windows \
@@ -123,35 +125,11 @@ fn show_main(app: &AppHandle) {
 /// no shared "current recording" state here, the caller (hotkeys' controller
 /// thread) is the sole owner of that for as long as it's active.
 pub(crate) fn begin_recording(app: &AppHandle, mode: Mode) -> Option<audio::RecordingHandle> {
-    let (level_tx, level_rx) = mpsc::channel::<f32>();
-    match audio::start_recording(level_tx) {
+    match audio::start_recording() {
         Ok(handle) => {
             eprintln!("[quietype] begin_recording({mode:?})");
             show_overlay(app);
             emit_state(app, "recording", mode, None);
-
-            // Continuous mic-level streaming (100+ events/sec, confirmed via
-            // a diagnostic counter that Tauri's plain emit/listen silently
-            // drops that entirely, even throttled to 30Hz) is abandoned in
-            // favor of a much rarer signal: only emit when loudness crosses
-            // a threshold, i.e. silence <-> speech, which happens at most a
-            // few times a second -- comfortably inside the rate overlay-state
-            // already proves works. The overlay just plays a fixed CSS
-            // animation while "active" instead of following exact amplitude.
-            const ACTIVE_THRESHOLD: f32 = 0.08;
-            let app_levels = app.clone();
-            thread::spawn(move || {
-                let mut active = false;
-                while let Ok(level) = level_rx.recv() {
-                    let now_active = level > ACTIVE_THRESHOLD;
-                    if now_active != active {
-                        active = now_active;
-                        eprintln!("[quietype] overlay-active -> {active}");
-                        let _ = app_levels.emit("overlay-active", active);
-                    }
-                }
-            });
-
             Some(handle)
         }
         Err(e) => {
