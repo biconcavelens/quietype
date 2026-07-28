@@ -1,11 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-
-interface Settings {
-  modelPath: string;
-  apiKey: string;
-  sound: boolean;
-}
+import { applyTheme, initTheme, type Theme } from "./theme";
 
 interface HistoryEntry {
   at: number;
@@ -14,11 +9,11 @@ interface HistoryEntry {
   output: string;
 }
 
-// serde uses snake_case on the Rust side.
+/** Mirrors the Rust `Settings` struct, which serializes as snake_case. */
 interface RawSettings {
   model_path: string;
   api_key: string;
-  sound: boolean;
+  theme: Theme;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -26,9 +21,9 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const modelPathEl = $<HTMLInputElement>("model-path");
 const modelHintEl = $<HTMLParagraphElement>("model-hint");
 const apiKeyEl = $<HTMLInputElement>("api-key");
-const soundEl = $<HTMLInputElement>("sound");
 const savedFlagEl = $<HTMLSpanElement>("saved-flag");
 const historyListEl = $<HTMLDivElement>("history-list");
+const themePickerEl = $<HTMLDivElement>("theme-picker");
 
 /* ---- tabs ------------------------------------------------------------ */
 
@@ -50,27 +45,31 @@ function relativeTime(ms: number): string {
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
   return new Date(ms).toLocaleDateString();
 }
 
-function renderHistory(entries: HistoryEntry[]) {
-  historyListEl.replaceChildren();
+function showEmpty(title: string, detail: string, isError = false) {
+  const empty = document.createElement("div");
+  empty.className = isError ? "empty is-error" : "empty";
+  const inner = document.createElement("div");
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  const p = document.createElement("p");
+  p.textContent = detail;
+  inner.append(strong, p);
+  empty.append(inner);
+  historyListEl.replaceChildren(empty);
+}
 
+function renderHistory(entries: HistoryEntry[]) {
   if (entries.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    const inner = document.createElement("div");
-    const strong = document.createElement("strong");
-    strong.textContent = "Nothing yet";
-    const p = document.createElement("p");
-    p.textContent = "Press Win+Ctrl+` anywhere and start talking.";
-    inner.append(strong, p);
-    empty.append(inner);
-    historyListEl.append(empty);
+    showEmpty("Nothing yet", "Hold Win+Ctrl anywhere and start talking.");
     return;
   }
 
-  for (const entry of entries) {
+  const cards = entries.map((entry) => {
     const card = document.createElement("div");
     card.className = "entry";
 
@@ -110,39 +109,71 @@ function renderHistory(entries: HistoryEntry[]) {
     actions.append(copy);
     card.append(actions);
 
-    historyListEl.append(card);
+    return card;
+  });
+
+  historyListEl.replaceChildren(...cards);
+}
+
+// Every path that can fail reports on screen. A silent catch here is what
+// makes "history is empty" indistinguishable from "history failed to load".
+async function loadHistory() {
+  try {
+    renderHistory(await invoke<HistoryEntry[]>("get_history"));
+  } catch (err) {
+    showEmpty("Couldn't load history", String(err), true);
   }
 }
 
-async function loadHistory() {
-  renderHistory(await invoke<HistoryEntry[]>("get_history"));
-}
-
 $("clear-history").addEventListener("click", async () => {
-  await invoke("clear_history");
+  try {
+    await invoke("clear_history");
+  } catch (err) {
+    showEmpty("Couldn't clear history", String(err), true);
+    return;
+  }
   await loadHistory();
 });
 
 /* ---- settings -------------------------------------------------------- */
 
-let current: Settings = { modelPath: "", apiKey: "", sound: false };
+let current: RawSettings = {
+  model_path: "",
+  api_key: "",
+  theme: "system",
+};
 let saveTimer: number | undefined;
 
 async function refreshModelHint(path: string) {
-  const exists = await invoke<boolean>("model_exists", { path });
-  modelHintEl.className = `hint ${exists ? "ok" : "bad"}`;
-  modelHintEl.textContent = exists
-    ? "Model found — dictation runs entirely on this machine."
-    : "No model at this path. Download a whisper.cpp ggml model and point here.";
+  try {
+    const exists = await invoke<boolean>("model_exists", { path });
+    modelHintEl.className = `hint ${exists ? "ok" : "bad"}`;
+    modelHintEl.textContent = exists
+      ? "Model found — dictation runs entirely on this machine."
+      : "No model at this path. Download a whisper.cpp ggml model and point here.";
+  } catch (err) {
+    modelHintEl.className = "hint bad";
+    modelHintEl.textContent = String(err);
+  }
+}
+
+function markThemeButton(theme: Theme) {
+  themePickerEl.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.themeValue === theme);
+  });
 }
 
 async function loadSettings() {
-  const raw = await invoke<RawSettings>("get_settings");
-  current = { modelPath: raw.model_path, apiKey: raw.api_key, sound: raw.sound };
-  modelPathEl.value = current.modelPath;
-  apiKeyEl.value = current.apiKey;
-  soundEl.checked = current.sound;
-  await refreshModelHint(current.modelPath);
+  try {
+    current = await invoke<RawSettings>("get_settings");
+    modelPathEl.value = current.model_path;
+    apiKeyEl.value = current.api_key;
+    markThemeButton(current.theme ?? "system");
+    await refreshModelHint(current.model_path);
+  } catch (err) {
+    modelHintEl.className = "hint bad";
+    modelHintEl.textContent = `Couldn't load settings: ${err}`;
+  }
 }
 
 function flashSaved() {
@@ -150,34 +181,58 @@ function flashSaved() {
   setTimeout(() => savedFlagEl.classList.remove("show"), 1200);
 }
 
+async function save() {
+  try {
+    await invoke("set_settings", { settings: current });
+    flashSaved();
+  } catch (err) {
+    modelHintEl.className = "hint bad";
+    modelHintEl.textContent = `Couldn't save: ${err}`;
+  }
+}
+
 // Debounced so typing a path or key doesn't write a file per keystroke.
 function queueSave() {
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(async () => {
     current = {
-      modelPath: modelPathEl.value.trim(),
-      apiKey: apiKeyEl.value.trim(),
-      sound: soundEl.checked,
+      ...current,
+      model_path: modelPathEl.value.trim(),
+      api_key: apiKeyEl.value.trim(),
     };
-    await invoke("set_settings", {
-      settings: {
-        model_path: current.modelPath,
-        api_key: current.apiKey,
-        sound: current.sound,
-      },
-    });
-    await refreshModelHint(current.modelPath);
-    flashSaved();
+    await save();
+    await refreshModelHint(current.model_path);
   }, 400);
 }
 
 modelPathEl.addEventListener("input", queueSave);
 apiKeyEl.addEventListener("input", queueSave);
-soundEl.addEventListener("change", queueSave);
+
+themePickerEl.addEventListener("click", async (event) => {
+  const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
+  const theme = btn?.dataset.themeValue as Theme | undefined;
+  if (!theme) return;
+
+  // Apply immediately so the click feels instant, then persist.
+  applyTheme(theme);
+  markThemeButton(theme);
+  current = { ...current, theme };
+  await save();
+});
 
 /* ---- boot ------------------------------------------------------------ */
 
 listen("history-changed", loadHistory);
 
+// Also refresh whenever the window comes back into view. The push event above
+// is the fast path, but this window spends most of its life hidden in the
+// tray, so it should never depend on having caught an event while it wasn't
+// being looked at.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadHistory();
+});
+window.addEventListener("focus", loadHistory);
+
+initTheme();
 loadSettings();
 loadHistory();

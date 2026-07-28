@@ -1,0 +1,70 @@
+/* Solarized — Ethan Schoonover's palette.
+   https://ethanschoonover.com/solarized/
+
+   The accent hues are deliberately identical in both modes; only the eight
+   monotones swap. That's the whole point of the scheme, so don't "fix" the
+   accents per-theme. */
+
+:root {
+  /* monotones */
+  --base03: #002b36;
+  --base02: #073642;
+  --base01: #586e75;
+  --base00: #657b83;
+  --base0: #839496;
+  --base1: #93a1a1;
+  --base2: #eee8d5;
+  --base3: #fdf6e3;
+
+  /* accents */
+  --yellow: #b58900;
+  --orange: #cb4b16;
+  --red: #dc322f;
+  --magenta: #d33682;
+  --violet: #6c71c4;
+  --blue: #268bd2;
+  --cyan: #2aa198;
+  --green: #859900;
+
+  --radius: 10px;
+  --radius-lg: 14px;
+}
+
+/* Dark is the default so an unresolved theme never flashes white. */
+:root,
+:root[data-theme="dark"] {
+  --bg: var(--base03);
+  --bg-elev: #01323d;
+  --bg-elev-2: var(--base02);
+  --border: #0d4250;
+  --border-strong: #14515f;
+  --text: var(--base1);
+  --text-dim: var(--base0);
+  --text-mute: var(--base01);
+  --shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+  --accent-wash: rgba(38, 139, 210, 0.16);
+  --violet-wash: rgba(108, 113, 196, 0.18);
+  --green-wash: rgba(133, 153, 0, 0.16);
+  --red-wash: rgba(220, 50, 47, 0.16);
+}
+
+:root[data-theme="light"] {
+  --bg: var(--base3);
+  --bg-elev: #f7f1de;
+  --bg-elev-2: var(--base2);
+  --border: #e3dcc6;
+  --border-strong: #d6ceb6;
+  --text: var(--base01);
+  --text-dim: var(--base00);
+  --text-mute: var(--base1);
+  --shadow: 0 10px 32px rgba(88, 110, 117, 0.18);
+  --accent-wash: rgba(38, 139, 210, 0.14);
+  --violet-wash: rgba(108, 113, 196, 0.14);
+  --green-wash: rgba(133, 153, 0, 0.16);
+  --red-wash: rgba(220, 50, 47, 0.12);
+}
+
+::selection {
+  background: var(--accent-wash);
+  color: var(--text);
+}

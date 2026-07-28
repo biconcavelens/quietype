@@ -16,8 +16,8 @@ use tauri::{
 
 const MAIN_LABEL: &str = "main";
 const OVERLAY_LABEL: &str = "overlay";
-const OVERLAY_W: f64 = 340.0;
-const OVERLAY_H: f64 = 64.0;
+const OVERLAY_W: f64 = 356.0;
+const OVERLAY_H: f64 = 72.0;
 /// Gap between the overlay pill and the bottom of the screen.
 const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 
@@ -203,6 +203,9 @@ fn get_settings(app: AppHandle) -> store::Settings {
 fn set_settings(app: AppHandle, settings: store::Settings) -> Result<(), String> {
     store::save_settings(&app, &settings)?;
     transcribe::warm(&settings.model_path);
+    // The overlay is a separate window with its own copy of the theme, so it
+    // has to be told; emitting to both keeps them from drifting apart.
+    let _ = app.emit("settings-changed", &settings);
     Ok(())
 }
 

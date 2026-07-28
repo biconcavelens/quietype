@@ -13,8 +13,8 @@ pub struct Settings {
     pub model_path: String,
     /// Anthropic key for assistant mode. Empty = fall back to ANTHROPIC_API_KEY.
     pub api_key: String,
-    /// Play a short sound when a dictation lands.
-    pub sound: bool,
+    /// "system" | "light" | "dark" — resolved against the OS on the frontend.
+    pub theme: String,
 }
 
 impl Default for Settings {
@@ -22,7 +22,7 @@ impl Default for Settings {
         Self {
             model_path: default_model_path(),
             api_key: String::new(),
-            sound: false,
+            theme: "system".to_string(),
         }
     }
 }

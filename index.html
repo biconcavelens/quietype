@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/src/theme.css" />
     <link rel="stylesheet" href="/src/styles.css" />
     <title>quietype</title>
     <script type="module" src="/src/main.ts" defer></script>
@@ -15,10 +16,14 @@
         <span class="name">quietype</span>
       </div>
       <div class="hotkeys">
-        <span class="hk"><kbd>Win</kbd><kbd>Ctrl</kbd> hold to dictate</span>
-        <span class="hk"
-          ><kbd>Win</kbd><kbd>Ctrl</kbd><kbd>Shift</kbd> hold for assistant</span
-        >
+        <span class="hk">
+          <kbd>Win</kbd><kbd>Ctrl</kbd>
+          <span class="hk-label">hold to dictate</span>
+        </span>
+        <span class="hk">
+          <kbd>Win</kbd><kbd>Ctrl</kbd><kbd>Shift</kbd>
+          <span class="hk-label">hold for assistant</span>
+        </span>
       </div>
     </header>
 
@@ -31,7 +36,7 @@
       <section class="panel is-active" id="panel-history">
         <div class="panel-head">
           <h2>Recent</h2>
-          <button class="btn btn-ghost" id="clear-history">Clear</button>
+          <button class="btn btn-ghost" id="clear-history">Clear all</button>
         </div>
         <div id="history-list" class="list"></div>
       </section>
@@ -40,6 +45,16 @@
         <div class="panel-head">
           <h2>Settings</h2>
           <span class="saved" id="saved-flag">Saved</span>
+        </div>
+
+        <div class="field">
+          <label>Appearance</label>
+          <div class="segmented" id="theme-picker" role="group">
+            <button type="button" data-theme-value="system">System</button>
+            <button type="button" data-theme-value="light">Light</button>
+            <button type="button" data-theme-value="dark">Dark</button>
+          </div>
+          <p class="hint">Solarized, in both directions.</p>
         </div>
 
         <div class="field">
@@ -62,14 +77,6 @@
             <code>ANTHROPIC_API_KEY</code> is set in your environment, it wins over
             this field.
           </p>
-        </div>
-
-        <div class="field field-row">
-          <div>
-            <label for="sound">Sound on completion</label>
-            <p class="hint">Play a short chime when text is inserted.</p>
-          </div>
-          <input id="sound" type="checkbox" />
         </div>
 
         <div class="privacy">

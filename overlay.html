@@ -1,19 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/src/theme.css" />
     <link rel="stylesheet" href="/src/overlay.css" />
     <title>quietype overlay</title>
     <script type="module" src="/src/overlay.ts" defer></script>
   </head>
   <body>
-    <div class="pill" id="pill">
+    <div class="pill" id="pill" data-mode="dictate">
       <div class="glyph" id="glyph"></div>
+
       <div class="body">
-        <div class="wave" id="wave"></div>
-        <div class="status" id="status">Listening</div>
+        <div class="label" id="label">Listening</div>
+
+        <div class="viz">
+          <!-- Reactive: bar heights follow the mic. Only while listening. -->
+          <div class="wave" id="wave"></div>
+          <!-- Indeterminate: a sweep that says "working", not "hearing". -->
+          <div class="sweep"><span></span></div>
+          <div class="result" id="result"></div>
+        </div>
       </div>
+
       <div class="badge" id="badge">Dictate</div>
     </div>
   </body>
