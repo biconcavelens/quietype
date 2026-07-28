@@ -48,7 +48,7 @@ function render() {
     for (let i = 0; i < BAR_COUNT; i++) {
       // Taper the ends so the waveform reads as a shape, not a block.
       const taper = Math.sin((i / (BAR_COUNT - 1)) * Math.PI) * 0.5 + 0.5;
-      bars[i].style.height = `${2 + trail[i] * taper * 16}px`;
+      bars[i].style.height = `${3 + trail[i] * taper * 16}px`;
     }
   }
   requestAnimationFrame(render);
