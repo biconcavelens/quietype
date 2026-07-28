@@ -6,7 +6,7 @@ mod store;
 pub mod transcribe;
 
 use serde::Serialize;
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex, OnceLock};
 use std::thread;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -16,8 +16,8 @@ use tauri::{
 
 const MAIN_LABEL: &str = "main";
 const OVERLAY_LABEL: &str = "overlay";
-const OVERLAY_W: f64 = 356.0;
-const OVERLAY_H: f64 = 72.0;
+const OVERLAY_W: f64 = 296.0;
+const OVERLAY_H: f64 = 52.0;
 /// Gap between the overlay pill and the bottom of the screen.
 const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 
@@ -52,8 +52,31 @@ struct OverlayState {
     text: Option<String>,
 }
 
+/// Last state we published, so a webview that loads mid-sequence can catch up.
+static LAST_STATE: OnceLock<Mutex<Option<OverlayState>>> = OnceLock::new();
+
+fn last_state() -> &'static Mutex<Option<OverlayState>> {
+    LAST_STATE.get_or_init(|| Mutex::new(None))
+}
+
 fn emit_state(app: &AppHandle, phase: &'static str, mode: Mode, text: Option<String>) {
-    let _ = app.emit_to(OVERLAY_LABEL, "overlay-state", OverlayState { phase, mode, text });
+    let state = OverlayState { phase, mode, text };
+    if let Ok(mut slot) = last_state().lock() {
+        *slot = Some(state.clone());
+    }
+    // Broadcast rather than target a label: the overlay is the only listener
+    // for this event, and targeting was one more thing to get wrong.
+    let _ = app.emit("overlay-state", state);
+}
+
+/// The overlay window is created hidden at startup, and WebView2 doesn't
+/// necessarily finish loading it until it's first shown -- so the very first
+/// `overlay-state` event can fire before any listener exists, leaving the pill
+/// stuck on its raw HTML defaults. The overlay pulls this on load so it can't
+/// miss the state that was set while it was still booting.
+#[tauri::command]
+fn overlay_state() -> Option<OverlayState> {
+    last_state().lock().ok().and_then(|s| s.clone())
 }
 
 fn show_overlay(app: &AppHandle) {
@@ -102,7 +125,7 @@ pub(crate) fn begin_recording(app: &AppHandle, mode: Mode) -> Option<audio::Reco
             let app_levels = app.clone();
             thread::spawn(move || {
                 while let Ok(level) = level_rx.recv() {
-                    let _ = app_levels.emit_to(OVERLAY_LABEL, "overlay-level", level);
+                    let _ = app_levels.emit("overlay-level", level);
                 }
             });
 
@@ -233,7 +256,8 @@ pub fn run() {
             set_settings,
             get_history,
             clear_history,
-            model_exists
+            model_exists,
+            overlay_state
         ])
         .setup(|app| {
             let handle = app.handle().clone();
