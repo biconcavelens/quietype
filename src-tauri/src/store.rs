@@ -11,8 +11,6 @@ const MAX_HISTORY: usize = 200;
 pub struct Settings {
     /// Path to the whisper.cpp ggml model used for local transcription.
     pub model_path: String,
-    /// Anthropic key for assistant mode. Empty = fall back to ANTHROPIC_API_KEY.
-    pub api_key: String,
     /// "system" | "light" | "dark" — resolved against the OS on the frontend.
     pub theme: String,
 }
@@ -21,20 +19,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             model_path: default_model_path(),
-            api_key: String::new(),
             theme: "system".to_string(),
         }
-    }
-}
-
-impl Settings {
-    /// Env var wins over the stored key so a shell-exported key keeps working
-    /// without anyone having to retype it into the UI.
-    pub fn resolved_api_key(&self) -> Option<String> {
-        std::env::var("ANTHROPIC_API_KEY")
-            .ok()
-            .filter(|k| !k.trim().is_empty())
-            .or_else(|| Some(self.api_key.clone()).filter(|k| !k.trim().is_empty()))
     }
 }
 

@@ -12,7 +12,6 @@ interface HistoryEntry {
 /** Mirrors the Rust `Settings` struct, which serializes as snake_case. */
 interface RawSettings {
   model_path: string;
-  api_key: string;
   theme: Theme;
 }
 
@@ -20,7 +19,6 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 const modelPathEl = $<HTMLInputElement>("model-path");
 const modelHintEl = $<HTMLParagraphElement>("model-hint");
-const apiKeyEl = $<HTMLInputElement>("api-key");
 const savedFlagEl = $<HTMLSpanElement>("saved-flag");
 const historyListEl = $<HTMLDivElement>("history-list");
 const themePickerEl = $<HTMLDivElement>("theme-picker");
@@ -139,7 +137,6 @@ $("clear-history").addEventListener("click", async () => {
 
 let current: RawSettings = {
   model_path: "",
-  api_key: "",
   theme: "system",
 };
 let saveTimer: number | undefined;
@@ -167,7 +164,6 @@ async function loadSettings() {
   try {
     current = await invoke<RawSettings>("get_settings");
     modelPathEl.value = current.model_path;
-    apiKeyEl.value = current.api_key;
     markThemeButton(current.theme ?? "system");
     await refreshModelHint(current.model_path);
   } catch (err) {
@@ -198,7 +194,6 @@ function queueSave() {
     current = {
       ...current,
       model_path: modelPathEl.value.trim(),
-      api_key: apiKeyEl.value.trim(),
     };
     await save();
     await refreshModelHint(current.model_path);
@@ -206,7 +201,6 @@ function queueSave() {
 }
 
 modelPathEl.addEventListener("input", queueSave);
-apiKeyEl.addEventListener("input", queueSave);
 
 themePickerEl.addEventListener("click", async (event) => {
   const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("button");

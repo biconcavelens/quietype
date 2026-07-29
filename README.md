@@ -3,9 +3,9 @@
 **Local-first, open-source desktop dictation + assistant.** Two press-and-hold hotkeys, one voice pipeline:
 
 - **Hold `Win`+`Ctrl` — Dictate.** Speak, let go. Transcribed locally, typed verbatim wherever your cursor is.
-- **Hold `Win`+`Ctrl`+`Shift` — Assistant.** Speak an instruction ("make this more professional", "answer this using my resume"), let go. Your selected text becomes context, Claude does the edit/fill, the result gets typed in.
+- **Hold `Win`+`Ctrl`+`Shift` — Assistant.** Speak an instruction ("make this more professional", "answer this using my resume"), let go. Your selected text becomes context, a local Gemma 4 model does the edit/fill, the result gets typed in.
 
-Both hotkeys share the same local speech-to-text engine — the only difference is what happens to the transcript: typed as-is, or handed to an LLM as an instruction. Both are hold-to-talk: key-down starts recording, key-up stops it, no toggle to remember.
+Both hotkeys share the same local speech-to-text engine — the only difference is what happens to the transcript: typed as-is, or handed to a local LLM as an instruction. Both are hold-to-talk: key-down starts recording, key-up stops it, no toggle to remember. Nothing in either path leaves the machine.
 
 ## Why
 
@@ -31,7 +31,7 @@ Superwhisper already covers local + Mac well; quietype's edit is Windows/Linux-f
 
 ## Principles
 
-1. **Local by default.** Transcription runs on-device. No audio or transcript leaves your machine unless you explicitly opt into a cloud/BYOK backend.
+1. **Local by default.** Transcription and the assistant both run on-device. No audio, transcript, or instruction leaves your machine.
 2. **Native, not Electron.** Tauri (Rust core + system webview) — small binaries, low idle memory, no 800MB-idle bloat.
 3. **Transparent.** Open-source core. What the app captures and where it goes should be auditable, not a trust exercise.
 4. **Streaming.** Text should appear as you speak, not only after you stop.
@@ -92,7 +92,12 @@ Not done yet: streaming partial transcripts, rebindable hotkeys, packaging.
 - **Audio capture:** [cpal](https://docs.rs/cpal)
 - **Local transcription:** [whisper-rs](https://docs.rs/whisper-rs) (whisper.cpp bindings) — bring your own ggml model, see Setup
 - **Text injection / selection capture:** clipboard + simulated copy/paste ([arboard](https://docs.rs/arboard) + [enigo](https://docs.rs/enigo)) — the same mechanism every dictation app uses under the hood
-- **Assistant backend:** Anthropic API (BYOK), cloud by design since this is the one part of the pipeline that benefits from a frontier model
+- **Assistant backend:** local Gemma 4 E4B, served by [Ollama](https://ollama.com/)
+  on `localhost:11434`. Native tool-calling (`submit_result`, forced via
+  `tool_choice`) is what actually keeps the output clean — just offering the
+  tool wasn't enough; verified directly that the model sometimes ignores an
+  optional tool and answers conversationally (multi-option lists, markdown)
+  instead, which isn't safe to type into a text field unattended.
 
 ## Setup
 
@@ -101,9 +106,11 @@ Not done yet: streaming partial transcripts, rebindable hotkeys, packaging.
    and place it at `src-tauri/models/ggml-base.en.bin`. Not bundled or
    auto-downloaded — you choose what runs on your machine. The path is editable
    in Settings, or via `QUIETYPE_WHISPER_MODEL`.
-2. For assistant mode only, add an Anthropic API key in Settings (or export
-   `ANTHROPIC_API_KEY`, which takes precedence). Dictation works fully offline
-   without one.
+2. For assistant mode, install [Ollama](https://ollama.com/) and pull the model:
+   `ollama pull gemma4:e4b` (~9.6GB). Dictation works without this; only
+   assistant mode needs it. The app warms the model at startup and keeps it
+   resident for an hour per request (`keep_alive`), so normal usage gaps don't
+   repay Ollama's ~30s cold-load cost.
 3. `npm install && npm run tauri dev`
 
 ## Roadmap

@@ -188,8 +188,7 @@ async fn process(app: AppHandle, mode: Mode, samples: Vec<f32>) {
         Mode::Assistant => {
             emit_state(&app, "thinking", mode, Some(transcript.clone()));
             let context = inject::capture_selection().unwrap_or_default();
-            let key = settings.resolved_api_key().unwrap_or_default();
-            match assistant::run(&transcript, &context, &key).await {
+            match assistant::run(&transcript, &context).await {
                 Ok(result) => result,
                 Err(e) => {
                     emit_state(&app, "error", mode, Some(e));
@@ -320,8 +319,11 @@ pub fn run() {
 
             hotkeys::spawn(handle.clone());
 
-            // Pay the model-load cost now, not on the user's first dictation.
+            // Pay the model-load cost now, not on the user's first dictation
+            // (or, for the assistant, not on the first request after Ollama
+            // has idled it back out of memory).
             transcribe::warm(&store::load_settings(&handle).model_path);
+            assistant::warm();
 
             eprintln!("[quietype] ready — hold Win+Ctrl to dictate, Win+Ctrl+Shift for assistant");
             Ok(())

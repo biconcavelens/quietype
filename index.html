@@ -63,29 +63,13 @@
           <p class="hint" id="model-hint"></p>
         </div>
 
-        <div class="field">
-          <label for="api-key">Anthropic API key</label>
-          <input
-            id="api-key"
-            type="password"
-            spellcheck="false"
-            placeholder="sk-ant-…"
-            autocomplete="off"
-          />
-          <p class="hint">
-            Only used for assistant mode. Dictation stays fully offline. If
-            <code>ANTHROPIC_API_KEY</code> is set in your environment, it wins over
-            this field.
-          </p>
-        </div>
-
         <div class="privacy">
           <strong>Where your data goes</strong>
           <ul>
             <li>Dictation audio is transcribed on this machine and never uploaded.</li>
             <li>
-              Assistant mode sends your spoken instruction and current selection to
-              Anthropic. Nothing else.
+              Assistant mode runs on a local Gemma 4 model via Ollama, on this
+              machine. Nothing leaves it.
             </li>
             <li>History and settings are plain files in your local app-config folder.</li>
           </ul>
