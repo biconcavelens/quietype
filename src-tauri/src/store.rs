@@ -13,6 +13,25 @@ pub struct Settings {
     pub model_path: String,
     /// "system" | "light" | "dark" — resolved against the OS on the frontend.
     pub theme: String,
+    /// Free-form paragraph about the user, prepended to every assistant-mode
+    /// prompt so instructions don't have to carry it themselves each time.
+    pub personal_context: String,
+    /// Newline-separated names/emails/jargon. Fed into both Whisper's
+    /// initial_prompt (so these transcribe correctly in plain dictation, not
+    /// just when the assistant reads them) and the assistant's prompt.
+    pub vocabulary: String,
+    /// "whisper" | "gemma" -- which engine handles Win+Ctrl dictation.
+    /// Gemma uses the same local model/process as assistant mode (no
+    /// separate model to download) but is slower on CPU than Whisper's
+    /// dedicated speech model.
+    pub dictation_engine: String,
+    /// "preview" | "autonomous" | "confirm" -- how much the agent loop
+    /// pauses before executing a click/type/key/open-app action. Defaults
+    /// to "preview": a small local vision model grounding pixel coordinates
+    /// is inherently less reliable than the text-only tool-calling the rest
+    /// of the app relies on, so a brief cancel window before anything
+    /// actually happens on screen is the safer default.
+    pub autonomy: String,
 }
 
 impl Default for Settings {
@@ -20,6 +39,10 @@ impl Default for Settings {
         Self {
             model_path: default_model_path(),
             theme: "system".to_string(),
+            personal_context: String::new(),
+            vocabulary: String::new(),
+            dictation_engine: "whisper".to_string(),
+            autonomy: "preview".to_string(),
         }
     }
 }

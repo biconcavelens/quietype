@@ -9,19 +9,29 @@ interface HistoryEntry {
   output: string;
 }
 
+type DictationEngine = "whisper" | "gemma";
+type Autonomy = "preview" | "autonomous" | "confirm";
+
 /** Mirrors the Rust `Settings` struct, which serializes as snake_case. */
 interface RawSettings {
   model_path: string;
   theme: Theme;
+  personal_context: string;
+  vocabulary: string;
+  dictation_engine: DictationEngine;
+  autonomy: Autonomy;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const modelPathEl = $<HTMLInputElement>("model-path");
 const modelHintEl = $<HTMLParagraphElement>("model-hint");
-const savedFlagEl = $<HTMLSpanElement>("saved-flag");
 const historyListEl = $<HTMLDivElement>("history-list");
 const themePickerEl = $<HTMLDivElement>("theme-picker");
+const personalContextEl = $<HTMLTextAreaElement>("personal-context");
+const vocabularyEl = $<HTMLTextAreaElement>("vocabulary");
+const dictationEnginePickerEl = $<HTMLDivElement>("dictation-engine-picker");
+const autonomyPickerEl = $<HTMLDivElement>("autonomy-picker");
 
 /* ---- tabs ------------------------------------------------------------ */
 
@@ -138,6 +148,10 @@ $("clear-history").addEventListener("click", async () => {
 let current: RawSettings = {
   model_path: "",
   theme: "system",
+  personal_context: "",
+  vocabulary: "",
+  dictation_engine: "whisper",
+  autonomy: "preview",
 };
 let saveTimer: number | undefined;
 
@@ -160,11 +174,27 @@ function markThemeButton(theme: Theme) {
   });
 }
 
+function markDictationEngineButton(engine: DictationEngine) {
+  dictationEnginePickerEl.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.engineValue === engine);
+  });
+}
+
+function markAutonomyButton(autonomy: Autonomy) {
+  autonomyPickerEl.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.autonomyValue === autonomy);
+  });
+}
+
 async function loadSettings() {
   try {
     current = await invoke<RawSettings>("get_settings");
     modelPathEl.value = current.model_path;
+    personalContextEl.value = current.personal_context;
+    vocabularyEl.value = current.vocabulary;
     markThemeButton(current.theme ?? "system");
+    markDictationEngineButton(current.dictation_engine ?? "whisper");
+    markAutonomyButton(current.autonomy ?? "preview");
     await refreshModelHint(current.model_path);
   } catch (err) {
     modelHintEl.className = "hint bad";
@@ -173,8 +203,9 @@ async function loadSettings() {
 }
 
 function flashSaved() {
-  savedFlagEl.classList.add("show");
-  setTimeout(() => savedFlagEl.classList.remove("show"), 1200);
+  const flags = document.querySelectorAll<HTMLSpanElement>(".saved");
+  flags.forEach((flag) => flag.classList.add("show"));
+  setTimeout(() => flags.forEach((flag) => flag.classList.remove("show")), 1200);
 }
 
 async function save() {
@@ -202,6 +233,23 @@ function queueSave() {
 
 modelPathEl.addEventListener("input", queueSave);
 
+// Personal-tab fields don't affect the model-path hint, so they skip
+// refreshModelHint and just debounce straight to a save.
+function queueFieldSave() {
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(save, 400);
+}
+
+personalContextEl.addEventListener("input", () => {
+  current = { ...current, personal_context: personalContextEl.value };
+  queueFieldSave();
+});
+
+vocabularyEl.addEventListener("input", () => {
+  current = { ...current, vocabulary: vocabularyEl.value };
+  queueFieldSave();
+});
+
 themePickerEl.addEventListener("click", async (event) => {
   const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
   const theme = btn?.dataset.themeValue as Theme | undefined;
@@ -211,6 +259,26 @@ themePickerEl.addEventListener("click", async (event) => {
   applyTheme(theme);
   markThemeButton(theme);
   current = { ...current, theme };
+  await save();
+});
+
+dictationEnginePickerEl.addEventListener("click", async (event) => {
+  const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
+  const engine = btn?.dataset.engineValue as DictationEngine | undefined;
+  if (!engine) return;
+
+  markDictationEngineButton(engine);
+  current = { ...current, dictation_engine: engine };
+  await save();
+});
+
+autonomyPickerEl.addEventListener("click", async (event) => {
+  const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
+  const autonomy = btn?.dataset.autonomyValue as Autonomy | undefined;
+  if (!autonomy) return;
+
+  markAutonomyButton(autonomy);
+  current = { ...current, autonomy };
   await save();
 });
 

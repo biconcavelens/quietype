@@ -1,5 +1,7 @@
-mod assistant;
+mod agent;
 mod audio;
+mod computer;
+mod engine;
 mod hotkeys;
 mod inject;
 mod store;
@@ -16,9 +18,12 @@ use tauri::{
 
 const MAIN_LABEL: &str = "main";
 const OVERLAY_LABEL: &str = "overlay";
-const OVERLAY_W: f64 = 190.0;
-const OVERLAY_H: f64 = 40.0;
-/// Gap between the overlay pill and the bottom of the screen.
+// Grown from the original 190x40 pill to fit a pet avatar + speech bubble
+// above it -- the window is now always visible (idle by default) rather
+// than only appearing during a hotkey hold, so it needs room for both.
+const OVERLAY_W: f64 = 260.0;
+const OVERLAY_H: f64 = 150.0;
+/// Gap between the overlay and the bottom of the screen.
 const OVERLAY_BOTTOM_MARGIN: f64 = 110.0;
 
 // WebView2 reads the system's WinINet proxy config even for localhost, so a
@@ -57,9 +62,13 @@ impl Mode {
 
 #[derive(Serialize, Clone)]
 struct OverlayState {
-    /// recording | transcribing | thinking | done | error
+    /// idle | recording | transcribing | thinking | acting | done | error
     phase: &'static str,
     mode: Mode,
+    /// Whatever the pet should currently say in its speech bubble -- a
+    /// truncated dictation/assistant result, an error, or (during "acting")
+    /// narration of what it's doing. One field, one job: only ever one
+    /// message showing at a time regardless of phase.
     text: Option<String>,
 }
 
@@ -106,10 +115,11 @@ fn show_overlay(app: &AppHandle) {
     let _ = win.show();
 }
 
-fn hide_overlay(app: &AppHandle) {
-    if let Some(win) = app.get_webview_window(OVERLAY_LABEL) {
-        let _ = win.hide();
-    }
+/// The pet is always visible now (no more hide-after-fade); this is what
+/// `fade_out` settles back to once the final state has been readable for a
+/// beat.
+fn reset_to_idle(app: &AppHandle, mode: Mode) {
+    emit_state(app, "idle", mode, None);
 }
 
 fn show_main(app: &AppHandle) {
@@ -136,7 +146,7 @@ pub(crate) fn begin_recording(app: &AppHandle, mode: Mode) -> Option<audio::Reco
             eprintln!("[quietype] begin_recording failed: {e}");
             show_overlay(app);
             emit_state(app, "error", mode, Some(e));
-            fade_out(app.clone(), 2600);
+            fade_out(app.clone(), mode, 2600);
             None
         }
     }
@@ -156,30 +166,32 @@ async fn process(app: AppHandle, mode: Mode, samples: Vec<f32>) {
     let settings = store::load_settings(&app);
 
     let audio_ms = samples.len() as u128 * 1000 / 16_000;
-    let model_path = settings.model_path.clone();
-    // Whisper is CPU-bound; keep it off the async runtime's worker threads.
-    let transcribed = tauri::async_runtime::spawn_blocking(move || {
-        transcribe::transcribe(&samples, &model_path)
-    })
-    .await;
+    let vocabulary = settings.vocabulary.clone();
+    let transcribed: Result<String, String> = if settings.dictation_engine == "gemma" {
+        engine::transcribe_audio(&samples, &vocabulary).await
+    } else {
+        let model_path = settings.model_path.clone();
+        // Whisper is CPU-bound; keep it off the async runtime's worker threads.
+        tauri::async_runtime::spawn_blocking(move || {
+            transcribe::transcribe(&samples, &model_path, &vocabulary)
+        })
+        .await
+        .unwrap_or_else(|e| Err(e.to_string()))
+    };
     eprintln!(
         "[quietype] {audio_ms}ms audio -> transcribed in {:?}",
         t0.elapsed()
     );
 
     let transcript = match transcribed {
-        Ok(Ok(t)) if !t.is_empty() => t,
-        Ok(Ok(_)) => {
+        Ok(t) if !t.is_empty() => t,
+        Ok(_) => {
             emit_state(&app, "error", mode, Some("Didn't catch that.".into()));
-            return fade_out(app, 1800);
-        }
-        Ok(Err(e)) => {
-            emit_state(&app, "error", mode, Some(e));
-            return fade_out(app, 3600);
+            return fade_out(app, mode, 1800);
         }
         Err(e) => {
-            emit_state(&app, "error", mode, Some(e.to_string()));
-            return fade_out(app, 3600);
+            emit_state(&app, "error", mode, Some(e));
+            return fade_out(app, mode, 3600);
         }
     };
 
@@ -188,11 +200,19 @@ async fn process(app: AppHandle, mode: Mode, samples: Vec<f32>) {
         Mode::Assistant => {
             emit_state(&app, "thinking", mode, Some(transcript.clone()));
             let context = inject::capture_selection().unwrap_or_default();
-            match assistant::run(&transcript, &context).await {
-                Ok(result) => result,
+            match agent::run(&app, mode, &transcript, &context, &settings).await {
+                Ok(agent::AgentOutcome::TypeText(text)) => text,
+                Ok(agent::AgentOutcome::Done(summary)) => {
+                    // Already shown via emit_state inside agent::run --
+                    // nothing to type into a focused field for a pure
+                    // on-screen-action task, just log it.
+                    store::push_history(&app, mode.as_str(), &transcript, &summary);
+                    let _ = app.emit_to(MAIN_LABEL, "history-changed", ());
+                    return fade_out(app, mode, 2000);
+                }
                 Err(e) => {
                     emit_state(&app, "error", mode, Some(e));
-                    return fade_out(app, 4000);
+                    return fade_out(app, mode, 4000);
                 }
             }
         }
@@ -202,20 +222,21 @@ async fn process(app: AppHandle, mode: Mode, samples: Vec<f32>) {
 
     if let Err(e) = inject::type_text(&output) {
         emit_state(&app, "error", mode, Some(format!("Couldn't type that: {e}")));
-        return fade_out(app, 3600);
+        return fade_out(app, mode, 3600);
     }
 
     eprintln!("[quietype] key-up to typed: {:?}", t0.elapsed());
     store::push_history(&app, mode.as_str(), &transcript, &output);
     let _ = app.emit_to(MAIN_LABEL, "history-changed", ());
-    fade_out(app, 900);
+    fade_out(app, mode, 900);
 }
 
-/// Leaves the overlay up briefly so the final state is readable, then hides it.
-fn fade_out(app: AppHandle, after_ms: u64) {
+/// Leaves the overlay's final state readable for a beat, then settles back
+/// to idle (the pet is always visible now, never hidden).
+fn fade_out(app: AppHandle, mode: Mode, after_ms: u64) {
     thread::spawn(move || {
         thread::sleep(std::time::Duration::from_millis(after_ms));
-        hide_overlay(&app);
+        reset_to_idle(&app, mode);
     });
 }
 
@@ -302,7 +323,10 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show_main(app),
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        engine::stop();
+                        app.exit(0);
+                    }
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -320,10 +344,16 @@ pub fn run() {
             hotkeys::spawn(handle.clone());
 
             // Pay the model-load cost now, not on the user's first dictation
-            // (or, for the assistant, not on the first request after Ollama
-            // has idled it back out of memory).
+            // (or, for the assistant, not on its first request -- we own
+            // llama-server's lifecycle directly, so it stays loaded for the
+            // app's lifetime rather than idling back out like Ollama did).
             transcribe::warm(&store::load_settings(&handle).model_path);
-            assistant::warm();
+            engine::spawn();
+
+            // The pet is always on screen now, idle by default, rather than
+            // only appearing during a hotkey hold.
+            show_overlay(&handle);
+            emit_state(&handle, "idle", Mode::Dictate, None);
 
             eprintln!("[quietype] ready — hold Win+Ctrl to dictate, Win+Ctrl+Shift for assistant");
             Ok(())

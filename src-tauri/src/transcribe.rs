@@ -48,7 +48,12 @@ pub fn ensure_loaded(model_path: &str) -> Result<(), String> {
 
 /// Transcribes mono 16kHz f32 PCM samples to text. Blocking and CPU-heavy —
 /// callers should keep this off the async runtime.
-pub fn transcribe(samples: &[f32], model_path: &str) -> Result<String, String> {
+///
+/// `vocabulary` (names/emails/jargon the user has entered in Settings) is
+/// passed as Whisper's initial_prompt when non-empty -- this is a hint, not
+/// a hard constraint, but it measurably improves recognition of terms that
+/// wouldn't otherwise be in the model's normal vocabulary.
+pub fn transcribe(samples: &[f32], model_path: &str, vocabulary: &str) -> Result<String, String> {
     // Whisper needs a minimum amount of audio; anything shorter is a stray
     // hotkey tap rather than speech.
     if samples.len() < 16_000 / 4 {
@@ -67,6 +72,9 @@ pub fn transcribe(samples: &[f32], model_path: &str) -> Result<String, String> {
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
     params.set_suppress_blank(true);
+    if !vocabulary.trim().is_empty() {
+        params.set_initial_prompt(vocabulary);
+    }
     // "All available cores minus one" is wrong on hybrid CPUs (P-cores +
     // efficiency cores): ggml's thread pool has no concept of core
     // heterogeneity, so spreading work onto slow E-cores makes a

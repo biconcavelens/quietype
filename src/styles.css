@@ -354,7 +354,8 @@ label {
 }
 
 input[type="text"],
-input[type="password"] {
+input[type="password"],
+textarea {
   font: inherit;
   font-size: var(--text-base);
   color: var(--text);
@@ -366,8 +367,14 @@ input[type="password"] {
   transition: border-color 120ms, box-shadow 120ms;
 }
 
+textarea {
+  resize: vertical;
+  min-height: 2.4em;
+}
+
 input[type="text"]:focus,
-input[type="password"]:focus {
+input[type="password"]:focus,
+textarea:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px var(--accent-wash);
 }

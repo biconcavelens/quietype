@@ -8,3 +8,8 @@
 
 # Whisper models are large binaries fetched separately, see README
 /models/*.bin
+
+# Gemma 4 GGUF weights + multimodal projector, and the llama-server binaries
+# that serve them -- also large binaries fetched separately, see README
+/models/*.gguf
+/vendor/llama-server/

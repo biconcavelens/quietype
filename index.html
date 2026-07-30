@@ -29,6 +29,7 @@
 
     <nav class="tabs">
       <button class="tab is-active" data-tab="history">History</button>
+      <button class="tab" data-tab="personal">Personal</button>
       <button class="tab" data-tab="settings">Settings</button>
     </nav>
 
@@ -39,6 +40,25 @@
           <button class="btn btn-ghost" id="clear-history">Clear all</button>
         </div>
         <div id="history-list" class="list"></div>
+      </section>
+
+      <section class="panel" id="panel-personal">
+        <div class="panel-head">
+          <h2>Personal</h2>
+          <span class="saved">Saved</span>
+        </div>
+
+        <div class="field">
+          <label for="personal-context">About you</label>
+          <textarea id="personal-context" rows="4" spellcheck="false" placeholder="e.g. I'm a backend engineer at Acme Corp. Sign emails as Trish."></textarea>
+          <p class="hint">Prepended to every assistant-mode instruction.</p>
+        </div>
+
+        <div class="field">
+          <label for="vocabulary">Names, emails, terms</label>
+          <textarea id="vocabulary" rows="6" spellcheck="false" placeholder="One per line, e.g.&#10;Trishanth Mellimi&#10;trish@example.com&#10;Kubernetes"></textarea>
+          <p class="hint">One per line. Improves recognition in both dictation and assistant mode.</p>
+        </div>
       </section>
 
       <section class="panel" id="panel-settings">
@@ -58,6 +78,30 @@
         </div>
 
         <div class="field">
+          <label>Dictation engine</label>
+          <div class="segmented" id="dictation-engine-picker" role="group">
+            <button type="button" data-engine-value="whisper">Whisper</button>
+            <button type="button" data-engine-value="gemma">Gemma 4</button>
+          </div>
+          <p class="hint">Gemma uses the same local model as assistant mode
+            (no separate download) but is slower on CPU than Whisper's
+            dedicated speech model.</p>
+        </div>
+
+        <div class="field">
+          <label>Agent autonomy</label>
+          <div class="segmented" id="autonomy-picker" role="group">
+            <button type="button" data-autonomy-value="preview">Preview</button>
+            <button type="button" data-autonomy-value="autonomous">Autonomous</button>
+            <button type="button" data-autonomy-value="confirm">Confirm each step</button>
+          </div>
+          <p class="hint">Controls clicks/keystrokes the assistant makes on
+            your screen. Preview briefly shows the action before it happens
+            (Esc to cancel); Confirm waits for Enter on every single step.
+            Escape always cancels a running action.</p>
+        </div>
+
+        <div class="field">
           <label for="model-path">Whisper model</label>
           <input id="model-path" type="text" spellcheck="false" />
           <p class="hint" id="model-hint"></p>
@@ -68,8 +112,9 @@
           <ul>
             <li>Dictation audio is transcribed on this machine and never uploaded.</li>
             <li>
-              Assistant mode runs on a local Gemma 4 model via Ollama, on this
-              machine. Nothing leaves it.
+              Assistant mode runs on a local Gemma 4 model, served by
+              quietype's own bundled llama-server, on this machine. Nothing
+              leaves it.
             </li>
             <li>History and settings are plain files in your local app-config folder.</li>
           </ul>
